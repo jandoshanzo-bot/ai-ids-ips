@@ -1,0 +1,233 @@
+﻿{% extends 'base.html' %}
+
+{% block title %}{{ ts('Файл жүктеу - IDS', 'Загрузка файла - IDS', 'Upload File - IDS') }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+
+        <h2 class="mb-4 animate-fade-in-up">
+            <i class="fas fa-cloud-arrow-up me-2" style="color: var(--ai-primary);"></i>
+            {{ ts('Файл жүктеу', 'Загрузка файла', 'Upload file') }}
+        </h2>
+
+        <div class="ai-card animate-fade-in-up">
+            <div class="card-body p-4">
+
+                <div class="text-center mb-4">
+                    <div class="ai-feature-icon mx-auto mb-3"
+                         style="width:80px;height:80px;font-size:2rem;background:linear-gradient(135deg,var(--ai-primary),var(--ai-secondary));">
+                        <i class="fas fa-cloud-arrow-up"></i>
+                    </div>
+
+                    <h5 class="mb-2">
+                        {{ ts('CICIDS2017 немесе IIoT2025 файл жүктеу',
+                              'Загрузка файла CICIDS2017 или IIoT2025',
+                              'Upload CICIDS2017 or IIoT2025 file') }}
+                    </h5>
+
+                    <p class="mb-0" style="color: var(--text-muted);">
+                        {{ ts('Желілік трафикті автоматты талдау үшін файл жүктеңіз',
+                              'Загрузите файл для автоматического анализа трафика',
+                              'Upload a file for automatic traffic analysis') }}
+                    </p>
+                </div>
+
+                <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data">
+
+                    <div class="ai-form-group">
+                        <label for="model_type" class="ai-form-label">
+                            <i class="fas fa-robot me-2" style="color: var(--ai-primary);"></i>
+                            {{ ts('Модель таңдау', 'Выбор модели', 'Select model') }}
+                        </label>
+
+                        <select class="ai-input" id="model_type" name="model_type" required>
+                            <option value="cicids" selected>CICIDS2017 XGBoost</option>
+                            <option value="iiot2025">IIoT2025 XGBoost</option>
+                        </select>
+
+                        <small style="color: var(--text-muted);">
+                            <i class="fas fa-circle-info me-1"></i>
+                            {{ ts('CSV бағандары таңдалған модельдің feature тізіміне сәйкестендіріледі.',
+                                  'CSV-столбцы будут сопоставлены со списком признаков выбранной модели.',
+                                  'CSV columns are aligned to the selected model feature list.') }}
+                        </small>
+                    </div>
+
+                    <div class="ai-form-group">
+                        <label for="file" class="ai-form-label">
+                            <i class="fas fa-file me-2" style="color: var(--ai-primary);"></i>
+                            {{ ts('Файл таңдау', 'Выбор файла', 'Select file') }}
+                        </label>
+
+                        <input type="file"
+                               class="ai-input"
+                               id="file"
+                               name="file"
+                               accept=".csv,.json"
+                               required
+                               style="padding:1rem;">
+
+                        <small style="color: var(--text-muted);">
+                            <i class="fas fa-circle-info me-1"></i>
+                            {{ ts('Қолдау көрсетілетін форматтар: CSV, JSON (макс. 200MB)',
+                                  'Поддерживаемые форматы: CSV, JSON (макс. 200MB)',
+                                  'Supported formats: CSV, JSON (max 200MB)') }}
+                        </small>
+                    </div>
+
+                    <button type="submit" class="ai-btn ai-btn-primary w-100 py-3">
+                        <i class="fas fa-upload me-2"></i>
+                        {{ ts('Жүктеу және талдау',
+                              'Загрузить и проанализировать',
+                              'Upload and analyze') }}
+                    </button>
+
+                </form>
+
+                <hr class="my-4">
+
+                <h6 class="mb-3">
+                    <i class="fas fa-file-code me-2"></i>
+                    {{ ts('Файл форматы', 'Формат файла', 'File format') }}
+                </h6>
+
+                <div class="row g-3">
+
+                    <div class="col-md-6">
+                        <div class="ai-card p-3" style="background:var(--bg-glass);">
+                            <h6 style="color: var(--ai-success);">
+                                <i class="fas fa-file-csv me-2"></i>
+                                CSV
+                            </h6>
+
+<pre style="background:var(--bg-tertiary);padding:1rem;border-radius:var(--radius-sm);font-size:.78rem;"><code>Flow Duration,Total Fwd Packets,Total Backward Packets,Destination Port,Flow Bytes/s,Flow Packets/s,Packet Length Mean
+1200,5,4,80,3500,25,420
+3000,12,10,443,8200,40,510</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="ai-card p-3" style="background:var(--bg-glass);">
+                            <h6 style="color: var(--ai-secondary);">
+                                <i class="fas fa-file-code me-2"></i>
+                                JSON
+                            </h6>
+
+<pre style="background:var(--bg-tertiary);padding:1rem;border-radius:var(--radius-sm);font-size:.78rem;"><code>[
+ {
+  "Flow Duration": 1200,
+  "Total Fwd Packets": 5,
+  "Destination Port": 80
+ }
+]</code></pre>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="ai-card p-3 mt-4"
+                     style="background:rgba(6,182,212,.1);border-left:3px solid var(--ai-secondary);">
+
+                    <div class="d-flex align-items-start gap-3">
+                        <i class="fas fa-lightbulb"
+                           style="color:var(--ai-secondary);font-size:1.25rem;"></i>
+
+                        <div>
+                            <strong style="color:var(--ai-secondary);">
+                                {{ ts('Кеңес:', 'Совет:', 'Tip:') }}
+                            </strong>
+
+                            <span style="color:var(--text-secondary);font-size:.9rem;">
+                                {{ ts('CICIDS2017 feature бағандары қолданылса дәлдік жоғары болады. Жетіспейтін numeric бағандар автоматты түрде 0 болады.',
+                                      'Для лучшей точности используйте признаки CICIDS2017. Отсутствующие числовые поля автоматически станут 0.',
+                                      'Best accuracy comes from CICIDS2017 features. Missing numeric columns are automatically filled with 0.') }}
+                            </span>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+        <div class="ai-card mt-4 animate-fade-in-up animate-delay-1">
+            <div class="card-body p-4">
+
+                <h5 class="mb-3">
+                    <i class="fas fa-download me-2" style="color: var(--ai-success);"></i>
+                    {{ ts('Үлгі файлдар', 'Примеры файлов', 'Sample files') }}
+                </h5>
+
+                <p class="mb-3" style="color: var(--text-muted);">
+                    {{ ts('Сынақ үшін дайын файлдарды жүктеп алыңыз:',
+                          'Скачайте готовые файлы для теста:',
+                          'Download ready files for testing:') }}
+                </p>
+
+                <div class="d-flex gap-3 flex-wrap">
+
+                    <button type="button"
+                            class="ai-btn ai-btn-success"
+                            onclick="downloadSample('normal')">
+                        {{ ts('Қалыпты трафик (CICIDS CSV)',
+                              'Нормальный трафик (CICIDS CSV)',
+                              'Normal traffic (CICIDS CSV)') }}
+                    </button>
+
+                    <button type="button"
+                            class="ai-btn ai-btn-danger"
+                            onclick="downloadSample('attack')">
+                        {{ ts('Шабуыл трафигі (DDoS CSV)',
+                              'Атакующий трафик (DDoS CSV)',
+                              'Attack traffic (DDoS CSV)') }}
+                    </button>
+
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function downloadSample(type){
+
+    const headers = [
+        "Flow Duration",
+        "Total Fwd Packets",
+        "Total Backward Packets",
+        "Destination Port",
+        "Flow Bytes/s",
+        "Flow Packets/s",
+        "Packet Length Mean"
+    ];
+
+    let csv = headers.join(",") + "\n";
+
+    for(let i=0;i<10;i++){
+
+        if(type==="normal"){
+            csv += `1500,8,7,443,5200,35,480\n`;
+        }else{
+            csv += `50,4000,2,80,950000,8000,1400\n`;
+        }
+    }
+
+    const blob = new Blob([csv], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = type==="normal"
+        ? "sample_normal_cicids.csv"
+        : "sample_ddos_cicids.csv";
+
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

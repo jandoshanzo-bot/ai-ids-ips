@@ -1,0 +1,255 @@
+﻿{% extends 'base.html' %}
+
+{% block title %}{{ ts('Параметрлер - IDS', 'Настройки - IDS', 'Settings - IDS') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.settings-bot-icon-active {
+    background: linear-gradient(135deg, var(--ai-success), #059669);
+}
+
+.settings-bot-icon-warning {
+    background: linear-gradient(135deg, var(--ai-warning), #d97706);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <h2 class="mb-4 animate-fade-in-up">
+            <i class="fas fa-sliders me-2" style="color: var(--ai-primary);"></i>
+            {{ ts('Параметрлер', 'Настройки', 'Settings') }}
+        </h2>
+
+        <div class="ai-card mb-4 animate-fade-in-up {{ 'ai-card-success' if bot_info.is_active else 'ai-card-warning' }}">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center mb-4">
+                    <div class="flex-shrink-0">
+                        <div class="ai-feature-icon {{ 'settings-bot-icon-active' if bot_info.is_active else 'settings-bot-icon-warning' }}">
+                            <i class="fab fa-telegram"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-4">
+                        <h5 class="mb-1">Telegram Bot</h5>
+                        {% if bot_info.is_active %}
+                        <div class="ai-status ai-status-online">
+                            <span class="ai-status-dot"></span>
+                            <span style="color: var(--text-secondary);">{{ bot_info.name }} (@{{ bot_info.username }})</span>
+                        </div>
+                        {% else %}
+                        <div class="ai-status ai-status-offline">
+                            <span class="ai-status-dot"></span>
+                            <span style="color: var(--text-secondary);">{{ ts('Бот конфигурацияланбаған', 'Бот не настроен', 'Bot is not configured') }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if not bot_info.is_active %}
+                <div class="ai-alert ai-alert-warning mb-4">
+                    <i class="fas fa-triangle-exclamation me-2"></i>
+                    <div>
+                        <strong>{{ ts('Назар аударыңыз!', 'Внимание!', 'Attention!') }}</strong>
+                        {{ ts('Telegram алерттері жұмыс істеуі үшін .env файлында келесі параметрлерді орнатыңыз:', 'Чтобы Telegram-уведомления работали, укажите в .env следующие параметры:', 'To enable Telegram alerts, set these variables in .env:') }}
+                        <ul class="mt-2 mb-0">
+                            <li><code class="ai-code">TELEGRAM_BOT_TOKEN</code> - {{ ts('BotFather-ден алынған токен', 'токен от BotFather', 'token from BotFather') }}</li>
+                            <li><code class="ai-code">TELEGRAM_CHAT_ID</code> - {{ ts('Хабарламалар жіберілетін chat ID', 'chat ID для отправки сообщений', 'chat ID for notifications') }}</li>
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="ai-card p-3 mb-4" style="background: var(--bg-glass);">
+                    <label class="ai-form-label d-flex justify-content-between">
+                        <span><i class="fas fa-bell me-2" style="color: var(--ai-warning);"></i>{{ ts('Alert шегі', 'Порог оповещения', 'Alert threshold') }}</span>
+                        <span id="thresholdValue" class="fw-bold" style="color: var(--ai-primary-light);">{{ (alert_threshold|float * 100)|int }}%</span>
+                    </label>
+                    <input type="range"
+                           class="form-range mt-2"
+                           min="0" max="100"
+                           value="{{ (alert_threshold|float * 100)|int }}"
+                           id="thresholdRange"
+                           style="accent-color: var(--ai-primary);">
+                    <small style="color: var(--text-muted);">
+                        {{ ts('Осы мәннен жоғары ықтималдықта ғана Telegram-ға хабарлама жіберіледі', 'Уведомление в Telegram отправляется только при вероятности выше этого значения', 'Telegram alert is sent only when probability is above this threshold') }}
+                    </small>
+                </div>
+
+                <button type="button" class="ai-btn ai-btn-secondary" onclick="testTelegram()">
+                    <i class="fab fa-telegram me-2"></i>
+                    {{ ts('Тест хабарлама жіберу', 'Отправить тестовое сообщение', 'Send test message') }}
+                </button>
+            </div>
+        </div>
+
+        <div class="ai-card mb-4 animate-fade-in-up animate-delay-1">
+            <div class="card-body p-4">
+                <h5 class="mb-4">
+                    <i class="fas fa-robot me-2" style="color: var(--ai-secondary);"></i>
+                    {{ ts('Модельдер ақпараты', 'Информация о моделях', 'Models info') }}
+                </h5>
+
+                <div class="row g-3">
+                    {% for model in models %}
+                    <div class="col-12">
+                        <div class="ai-card p-3" style="background: var(--bg-glass);">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <i class="fas fa-cube" style="color: var(--ai-primary);"></i>
+                                        <span class="fw-semibold">{{ model.display_name }}</span>
+                                    </div>
+                                    <small style="color: var(--text-muted);">{{ model.name }}</small>
+                                </div>
+                                <span class="ai-badge ai-badge-success">
+                                    <i class="fas fa-circle" style="font-size: 0.4rem;"></i>
+                                    {{ ts('Белсенді', 'Активна', 'Active') }}
+                                </span>
+                            </div>
+                            {% if model.metrics %}
+                            <div class="row mt-3 pt-3" style="border-top: 1px solid var(--border-color);">
+                                <div class="col-3 text-center">
+                                    <div style="font-size: 0.9rem; font-weight: 600; color: var(--ai-primary-light);">
+                                        {{ "%.2f"|format(model.metrics.accuracy * 100) }}%
+                                    </div>
+                                    <small style="color: var(--text-muted); font-size: 0.75rem;">{{ ts('Дәлдік', 'Точность', 'Accuracy') }}</small>
+                                </div>
+                                <div class="col-3 text-center">
+                                    <div style="font-size: 0.9rem; font-weight: 600; color: var(--ai-success);">
+                                        {{ "%.2f"|format(model.metrics.precision * 100) }}%
+                                    </div>
+                                    <small style="color: var(--text-muted); font-size: 0.75rem;">{{ ts('Нақтылық', 'Точность (Precision)', 'Precision') }}</small>
+                                </div>
+                                <div class="col-3 text-center">
+                                    <div style="font-size: 0.9rem; font-weight: 600; color: var(--ai-secondary);">
+                                        {{ "%.2f"|format(model.metrics.recall * 100) }}%
+                                    </div>
+                                    <small style="color: var(--text-muted); font-size: 0.75rem;">{{ ts('Қамту', 'Полнота', 'Recall') }}</small>
+                                </div>
+                                <div class="col-3 text-center">
+                                    <div style="font-size: 0.9rem; font-weight: 600; color: var(--ai-warning);">
+                                        {{ "%.2f"|format(model.metrics.f1_score * 100) }}%
+                                    </div>
+                                    <small style="color: var(--text-muted); font-size: 0.75rem;">{{ ts('F1-көрсеткіш', 'F1-показатель', 'F1-score') }}</small>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if not model.metrics %}
+                            <p class="mb-0 mt-3 pt-3" style="border-top: 1px solid var(--border-color); color: var(--text-muted);">
+                                {{ ts('Сақталған метрикалар жоқ', 'Сохраненных метрик нет', 'No saved metrics') }}
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="ai-card animate-fade-in-up animate-delay-2">
+            <div class="card-body p-4">
+                <h5 class="mb-4">
+                    <i class="fas fa-code me-2" style="color: var(--ai-primary);"></i>
+                    {{ ts('API ақпараты', 'Информация API', 'API information') }}
+                </h5>
+
+                <div class="table-responsive">
+                    <table class="ai-table">
+                        <thead>
+                            <tr>
+                                <th>{{ ts('Метод', 'Метод', 'Method') }}</th>
+                                <th>{{ ts('Маршрут', 'Маршрут', 'Route') }}</th>
+                                <th>{{ ts('Сипаттама', 'Описание', 'Description') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="ai-badge ai-badge-success">POST</span></td>
+                                <td><code class="ai-code">/api/predict</code></td>
+                                <td style="color: var(--text-secondary);">{{ ts('Жеке болжау жасау', 'Сделать одиночный прогноз', 'Single prediction') }}</td>
+                            </tr>
+                            <tr>
+                                <td><span class="ai-badge ai-badge-success">POST</span></td>
+                                <td><code class="ai-code">/api/predict/batch</code></td>
+                                <td style="color: var(--text-secondary);">{{ ts('Бірнеше болжау жасау', 'Сделать пакетный прогноз', 'Batch prediction') }}</td>
+                            </tr>
+                            <tr>
+                                <td><span class="ai-badge ai-badge-primary">GET</span></td>
+                                <td><code class="ai-code">/api/history</code></td>
+                                <td style="color: var(--text-secondary);">{{ ts('Тарихты алу', 'Получить историю', 'Get history') }}</td>
+                            </tr>
+                            <tr>
+                                <td><span class="ai-badge ai-badge-primary">GET</span></td>
+                                <td><code class="ai-code">/api/statistics</code></td>
+                                <td style="color: var(--text-secondary);">{{ ts('Статистиканы алу', 'Получить статистику', 'Get statistics') }}</td>
+                            </tr>
+                            <tr>
+                                <td><span class="ai-badge ai-badge-primary">GET</span></td>
+                                <td><code class="ai-code">/api/models</code></td>
+                                <td style="color: var(--text-secondary);">{{ ts('Модельдер тізімі', 'Список моделей', 'Models list') }}</td>
+                            </tr>
+                            <tr>
+                                <td><span class="ai-badge ai-badge-primary">GET</span></td>
+                                <td><code class="ai-code">/api/health</code></td>
+                                <td style="color: var(--text-secondary);">{{ ts('Денсаулық тексеру', 'Проверка состояния', 'Health check') }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="ai-card p-3 mt-4" style="background: rgba(6, 182, 212, 0.1); border-left: 3px solid var(--ai-secondary);">
+                    <div class="d-flex align-items-center gap-3">
+                        <i class="fas fa-circle-info" style="color: var(--ai-secondary); font-size: 1.25rem;"></i>
+                        <span style="color: var(--text-secondary); font-size: 0.9rem;">
+                            {{ ts('Толық API құжаттамасы үшін', 'Для полной документации API откройте', 'For full API docs, check') }} <code class="ai-code">/api/health</code>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script id="settings-i18n" type="application/json">
+{{ {
+    'test_success_message': ts('Тест хабарламасы сәтті жіберілді!', 'Тестовое сообщение успешно отправлено!', 'Test message sent successfully!'),
+    'request_error_prefix': ts('Сұраныс қатесі: ', 'Ошибка запроса: ', 'Request error: '),
+    'generic_error_prefix': ts('Қате: ', 'Ошибка: ', 'Error: '),
+    'generic_unknown_error': ts('Белгісіз қате', 'Неизвестная ошибка', 'Unknown error')
+} | tojson }}
+</script>
+<script>
+const SETTINGS_I18N = JSON.parse(document.getElementById('settings-i18n').textContent);
+const TEST_SUCCESS_MESSAGE = SETTINGS_I18N.test_success_message;
+const REQUEST_ERROR_PREFIX = SETTINGS_I18N.request_error_prefix;
+const GENERIC_ERROR_PREFIX = SETTINGS_I18N.generic_error_prefix;
+const GENERIC_UNKNOWN_ERROR = SETTINGS_I18N.generic_unknown_error;
+
+document.getElementById('thresholdRange').addEventListener('input', function() {
+    document.getElementById('thresholdValue').textContent = this.value + '%';
+});
+
+function testTelegram() {
+
+    const threshold =
+        document.getElementById("thresholdRange").value;
+
+    fetch("/api/telegram/test", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            threshold: threshold
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        alert("Жіберілді");
+    });
+}
+</script>
+{% endblock %}

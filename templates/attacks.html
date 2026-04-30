@@ -1,0 +1,458 @@
+﻿{% extends 'base.html' %}
+{% block title %}{{ ts('Шабуыл талдауы - IDS', 'Анализ атак - IDS', 'Attack Analysis - IDS') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.attack-type-card {
+    border-left: 4px solid var(--ai-primary);
+    transition: transform .2s, box-shadow .2s;
+}
+.attack-type-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+.attack-type-card.dos   { border-left-color: #ef4444; }
+.attack-type-card.probe { border-left-color: #f59e0b; }
+.attack-type-card.r2l   { border-left-color: #8b5cf6; }
+.attack-type-card.u2r   { border-left-color: #ec4899; }
+
+.type-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px; font-size: .75rem; font-weight: 600;
+}
+.badge-dos    { background: rgba(239,68,68,.15);   color: #ef4444; }
+.badge-probe  { background: rgba(245,158,11,.15);  color: #f59e0b; }
+.badge-r2l    { background: rgba(139,92,246,.15);  color: #8b5cf6; }
+.badge-u2r    { background: rgba(236,72,153,.15);  color: #ec4899; }
+.badge-normal { background: rgba(16,185,129,.15);  color: #10b981; }
+.badge-unknown{ background: rgba(107,114,128,.15); color: #6b7280; }
+
+.type-progress { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+.type-progress-fill { height: 100%; border-radius: 3px; transition: width 1.2s ease; }
+.attack-type-count { font-size: 2rem; }
+.attack-type-avg { font-size: 1.1rem; font-weight: 700; }
+.attack-severity { font-size: .75rem; }
+
+.attacks-table { font-size: .85rem; }
+.attacks-table th { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
+
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+.empty-state i { font-size: 3rem; margin-bottom: 16px; opacity: .4; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set attack_name_map = {
+  'DoS': ts('DoS (қызметтен бас тарту)', 'DoS (отказ в обслуживании)', 'DoS (denial of service)'),
+  'Probe': ts('Probe (барлау)', 'Probe (сканирование)', 'Probe (reconnaissance)'),
+  'R2L': ts('R2L (қашықтан кіру)', 'R2L (удаленный доступ)', 'R2L (remote to local)'),
+  'U2R': ts('U2R (құқық көтеру)', 'U2R (повышение прав)', 'U2R (user to root)'),
+  'Unknown': ts('Белгісіз', 'Неизвестно', 'Unknown'),
+  'Normal': ts('Қалыпты', 'Норма', 'Normal')
+} %}
+{% set severity_map = {
+  'DoS': ts('Жоғары', 'Высокая', 'High'),
+  'Probe': ts('Орташа', 'Средняя', 'Medium'),
+  'R2L': ts('Жоғары', 'Высокая', 'High'),
+  'U2R': ts('Өте жоғары', 'Очень высокая', 'Critical'),
+  'Unknown': ts('Белгісіз', 'Неизвестно', 'Unknown')
+} %}
+
+<div class="row mb-4">
+  <div class="col-12 animate-fade-in-up">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+      <div>
+        <h2 class="mb-1">
+          <i class="fas fa-shield-virus me-2" style="color:var(--ai-danger)"></i>
+          {{ ts('Шабуыл типтері талдауы', 'Анализ типов атак', 'Attack type analysis') }}
+        </h2>
+        <p class="mb-0" style="color:var(--text-muted); font-size:.85rem;">
+          {{ ts('CICIDS2017 шабуыл түрлері бойынша анықталған оқиғалар', 'Обнаруженные события по типам атак CICIDS2017', 'Detected events by CICIDS2017 attack type') }}
+        </p>
+      </div>
+      <a href="{{ url_for('history') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-clock-rotate-left me-1"></i>{{ ts('Толық тарих', 'Полная история', 'Full history') }}
+      </a>
+    </div>
+  </div>
+</div>
+
+{% set by_type = attack_type_stats.by_type | default([]) %}
+{% set total_attacks = stats.attacks | default(0) %}
+{% set type_configs = attack_catalog | default([]) %}
+
+{% if total_attacks > 0 %}
+<div class="row g-3 mb-4">
+  {% for cfg in type_configs %}
+    {% set type_key = cfg.type %}
+    {% set color = cfg.color %}
+    {% set found = namespace(count=0, avg_prob=0) %}
+    {% for row in by_type %}
+      {% if row.attack_type == type_key %}
+        {% set found.count = row.count %}
+        {% set found.avg_prob = row.avg_probability %}
+      {% endif %}
+    {% endfor %}
+    <div class="col-md-6 col-xl-3 animate-fade-in-up">
+      <div class="ai-card attack-type-card h-100 attack-color-border" data-color="{{ color }}">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-start justify-content-between mb-3">
+            <div>
+              <div class="type-badge badge-unknown mb-2 attack-color-text" data-color="{{ color }}">
+                {{ cfg.emoji }} {{ type_key }}
+              </div>
+              <h3 class="mb-0 fw-bold attack-type-count attack-color-text" data-color="{{ color }}">
+                {{ found.count }}
+              </h3>
+              <small style="color:var(--text-muted)">{{ ts('анықталған оқиға', 'обнаруженных событий', 'detected events') }}</small>
+            </div>
+            <div class="text-end">
+              {% if found.avg_prob > 0 %}
+              <div class="mb-1" style="font-size:.75rem; color:var(--text-muted)">{{ ts('Орташа ықтимал.', 'Средняя вероятн.', 'Avg prob.') }}</div>
+              <div class="attack-type-avg attack-color-text" data-color="{{ color }}">{{ found.avg_prob }}%</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="mb-2">
+            <div class="type-progress">
+              {% if total_attacks > 0 and found.count > 0 %}
+              <div class="type-progress-fill attack-width-fill attack-color-bg"
+                   data-width="{{ ((found.count / total_attacks) * 100)|round(1) }}"
+                   data-color="{{ color }}">
+              </div>
+              {% else %}
+              <div class="type-progress-fill attack-width-fill attack-color-bg" data-width="0" data-color="{{ color }}"></div>
+              {% endif %}
+            </div>
+          </div>
+          <div style="font-size:.75rem; color:var(--text-muted)">{{ cfg.full_name }}</div>
+          <div style="font-size:.72rem; color:var(--text-muted); opacity:.7">{{ cfg.description }}</div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ai-card mb-4 animate-fade-in-up">
+  <div class="card-body p-5 text-center">
+    <div style="font-size:4rem; color:var(--ai-success); opacity:.65"><i class="fas fa-shield-check"></i></div>
+    <h4 class="mt-3 mb-2">{{ ts('Шабуылдар анықталмады', 'Атаки не обнаружены', 'No attacks detected') }}</h4>
+    <p class="mb-0" style="color:var(--text-muted)">{{ ts('CSV талдағанда шабуыл табылса, олардың түрлері осы бетте көрсетіледі.', 'Когда при анализе CSV будут найдены атаки, их типы появятся на этой странице.', 'When CSV analysis finds attacks, their types will appear on this page.') }}</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-5 animate-fade-in-up">
+    <div class="ai-card h-100">
+      <div class="card-body p-4">
+        <h5 class="mb-1">
+          <i class="fas fa-chart-pie me-2" style="color:var(--ai-primary)"></i>
+          {{ ts('Шабуыл типтерінің үлесі', 'Доли типов атак', 'Attack type share') }}
+        </h5>
+        <p class="mb-3" style="color:var(--text-muted);font-size:.8rem">{{ ts('Барлық уақыт · анықталған шабуылдар', 'За всё время · обнаруженные атаки', 'All time · detected attacks') }}</p>
+        {% if by_type %}
+        <div style="height:280px"><canvas id="attackDonut"></canvas></div>
+        {% else %}
+        <div class="empty-state"><i class="fas fa-chart-pie"></i><p>{{ ts('Деректер жоқ', 'Нет данных', 'No data') }}</p></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7 animate-fade-in-up animate-delay-1">
+    <div class="ai-card h-100">
+      <div class="card-body p-4">
+        <h5 class="mb-1">
+          <i class="fas fa-chart-bar me-2" style="color:var(--ai-secondary)"></i>
+          {{ ts('Типтер салыстырмасы', 'Сравнение типов', 'Type comparison') }}
+        </h5>
+        <p class="mb-3" style="color:var(--text-muted);font-size:.8rem">{{ ts('Саны мен орташа ықтималдығы', 'Количество и средняя вероятность', 'Count and average probability') }}</p>
+        {% if by_type %}
+        <div style="height:280px"><canvas id="attackBar"></canvas></div>
+        {% else %}
+        <div class="empty-state"><i class="fas fa-chart-bar"></i><p>{{ ts('Деректер жоқ', 'Нет данных', 'No data') }}</p></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% set timeline = attack_type_stats.timeline | default([]) %}
+<div class="row g-4 mb-4">
+  <div class="col-12 animate-fade-in-up animate-delay-1">
+    <div class="ai-card">
+      <div class="card-body p-4">
+        <h5 class="mb-1">
+          <i class="fas fa-wave-square me-2" style="color:var(--ai-success)"></i>
+          {{ ts('Шабуыл анықтау уақыты', 'Время обнаружения атак', 'Attack detection timeline') }}</h5>
+        <p class="mb-3" style="color:var(--text-muted);font-size:.8rem">{{ ts('Соңғы 7 күн · сағат бойынша', 'Последние 7 дней · по часам', 'Last 7 days · hourly') }}</p>
+        {% if timeline %}
+        <div style="height:240px"><canvas id="timelineChart"></canvas></div>
+        {% else %}
+        <div class="empty-state">
+          <i class="fas fa-wave-square"></i>
+          <p>{{ ts('Соңғы 7 күнде шабуыл анықталмады', 'За последние 7 дней атак не обнаружено', 'No attacks detected in the last 7 days') }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row animate-fade-in-up animate-delay-2">
+  <div class="col-12">
+    <div class="ai-card">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between mb-4">
+          <h5 class="mb-0">
+            <i class="fas fa-list me-2" style="color:var(--ai-danger)"></i>
+            {{ ts('Соңғы анықталған шабуылдар', 'Последние обнаруженные атаки', 'Recently detected attacks') }}
+          </h5>
+          <span class="ai-badge ai-badge-danger">{{ recent_attacks | length }} {{ ts('жазба', 'записей', 'records') }}</span>
+        </div>
+
+        {% if recent_attacks %}
+        <div class="table-responsive">
+          <table class="ai-table attacks-table">
+            <thead>
+              <tr>
+                <th>{{ ts('Уақыт', 'Время', 'Time') }}</th>
+                <th>{{ ts('Шабуыл түрі', 'Тип атаки', 'Attack type') }}</th>
+                <th>{{ ts('Ықтималдық', 'Вероятность', 'Probability') }}</th>
+                <th>{{ ts('Модель', 'Модель', 'Model') }}</th>
+                <th>Telegram</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for atk in recent_attacks %}
+              {% set meta = atk.attack_type_meta | default({}) %}
+              {% set atype = atk.attack_type_display if atk.attack_type_display is defined else (atk.attack_type | default('Unknown')) %}
+              <tr>
+                <td style="white-space:nowrap; color:var(--text-secondary); font-size:.8rem">
+                  {{ (atk.timestamp or '')[:19] }}
+                </td>
+                <td>
+                  <span class="type-badge badge-unknown attack-color-text" data-color="{{ meta.get('color', '#6b7280') }}">
+                    {{ meta.get('emoji', '❓') }} {{ atype }}
+                  </span>
+                  <div style="font-size:.72rem; color:var(--text-muted); margin-top:2px">
+                    {{ meta.get('full_name', attack_name_map.get(atype, atype)) }}
+                  </div>
+                </td>
+                <td>
+                  {% set prob = ((atk.probability or 0) * 100) | round(1) %}
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="ai-progress" style="width:70px">
+                      <div class="ai-progress-bar ai-progress-danger attack-width-fill"
+                           data-width="{{ prob }}"></div>
+                    </div>
+                    <small style="color:var(--text-secondary)">{{ prob }}%</small>
+                  </div>
+                </td>
+                <td>
+                  <span class="ai-badge ai-badge-primary" style="font-size:.72rem">
+                    {{ atk.model_name }}
+                  </span>
+                </td>
+                <td>
+                  {% if atk.alert_sent %}
+                  <i class="fab fa-telegram" title="{{ ts('Жіберілді', 'Отправлено', 'Sent') }}"
+                     style="color:var(--ai-secondary); font-size:1.1rem"></i>
+                  {% else %}
+                  <i class="fas fa-minus" style="color:var(--text-muted)"></i>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+          <i class="fas fa-shield-check" style="color:var(--ai-success)"></i>
+          <p>{{ ts('Шабуылдар анықталмады', 'Атаки не обнаружены', 'No attacks detected') }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-2 animate-fade-in-up animate-delay-3">
+  <div class="col-12">
+    <h6 style="color:var(--text-muted); font-size:.75rem; letter-spacing:.1em; text-transform:uppercase">
+      {{ ts('Шабуыл типтері туралы', 'О типах атак', 'About attack types') }}
+    </h6>
+  </div>
+  {% for cfg in type_configs %}
+  <div class="col-md-6 col-xl-3">
+    <div class="ai-card p-3" style="background:var(--bg-glass)">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="type-badge badge-unknown attack-color-text" data-color="{{ cfg.color }}">{{ cfg.emoji }} {{ cfg.type }}</span>
+        <span class="attack-severity attack-color-text" data-color="{{ cfg.color }}">{{ cfg.severity }}</span>
+      </div>
+      <div style="font-size:.8rem; font-weight:600; color:var(--text-primary)">{{ cfg.full_name }}</div>
+      <div style="font-size:.75rem; color:var(--text-muted); margin-top:4px">
+        {{ cfg.description }}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<script id="attack-chart-data" type="application/json">
+{{ {
+  "by_type": by_type,
+  "timeline": timeline,
+  "catalog": attack_catalog | default([])
+} | tojson }}
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const raw = JSON.parse(document.getElementById('attack-chart-data').textContent);
+const byType   = raw.by_type   || [];
+const timeline = raw.timeline  || [];
+const catalog  = raw.catalog   || [];
+
+const I18N_EVENTS = {{ ts('оқиға', 'событий', 'events') | tojson }};
+const I18N_COUNTS = {{ ts('Оқиға саны', 'Количество событий', 'Event count') | tojson }};
+const I18N_AVG_PROB = {{ ts('Орташа ықтималдық (%)', 'Средняя вероятность (%)', 'Average probability (%)') | tojson }};
+const I18N_COUNT_AXIS = {{ ts('Саны', 'Количество', 'Count') | tojson }};
+const I18N_PROB_AXIS = {{ ts('Ықтималдық', 'Вероятность', 'Probability') | tojson }};
+
+const TYPE_COLORS = Object.fromEntries(catalog.map((item) => [item.type, item.color || '#6b7280']));
+const TYPE_EMOJIS = Object.fromEntries(catalog.map((item) => [item.type, item.emoji || '❓']));
+TYPE_COLORS.Unknown = TYPE_COLORS.Unknown || '#6b7280';
+TYPE_EMOJIS.Unknown = TYPE_EMOJIS.Unknown || '❓';
+
+const isDark = !document.body.classList.contains('theme-light');
+Chart.defaults.color = isDark ? '#94a3b8' : '#475569';
+const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+
+const donutCanvas = document.getElementById('attackDonut');
+if (donutCanvas && byType.length) {
+  new Chart(donutCanvas, {
+    type: 'doughnut',
+    data: {
+      labels: byType.map(r => `${TYPE_EMOJIS[r.attack_type]||'❓'} ${r.attack_type}`),
+      datasets: [{
+        data: byType.map(r => r.count),
+        backgroundColor: byType.map(r => (TYPE_COLORS[r.attack_type] || '#6b7280') + 'cc'),
+        borderColor:     byType.map(r =>  TYPE_COLORS[r.attack_type] || '#6b7280'),
+        borderWidth: 2,
+        hoverOffset: 10,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: {
+        legend: { position: 'right', labels: { padding: 14, usePointStyle: true, font: { size: 12 } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+              const pct = total > 0 ? Math.round(ctx.parsed / total * 100) : 0;
+              return ` ${ctx.parsed} ${I18N_EVENTS} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+const barCanvas = document.getElementById('attackBar');
+if (barCanvas && byType.length) {
+  new Chart(barCanvas, {
+    type: 'bar',
+    data: {
+      labels: byType.map(r => r.attack_type),
+      datasets: [
+        {
+          label: I18N_COUNTS,
+          data: byType.map(r => r.count),
+          backgroundColor: byType.map(r => (TYPE_COLORS[r.attack_type] || '#6b7280') + 'bb'),
+          borderColor:     byType.map(r =>  TYPE_COLORS[r.attack_type] || '#6b7280'),
+          borderWidth: 1, borderRadius: 6, yAxisID: 'y',
+        },
+        {
+          label: I18N_AVG_PROB,
+          data: byType.map(r => r.avg_probability || 0),
+          backgroundColor: 'rgba(6,182,212,0.15)',
+          borderColor: '#06b6d4',
+          borderWidth: 2, type: 'line',
+          pointRadius: 5, pointBackgroundColor: '#06b6d4',
+          tension: 0.3, yAxisID: 'y2',
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x:  { grid: { display: false } },
+        y:  { grid: { color: gridColor }, ticks: { stepSize: 1 }, title: { display: true, text: I18N_COUNT_AXIS } },
+        y2: { position: 'right', grid: { display: false }, min: 0, max: 100,
+              ticks: { callback: v => v + '%' },
+              title: { display: true, text: I18N_PROB_AXIS } }
+      },
+      plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true } } }
+    }
+  });
+}
+
+const tlCanvas = document.getElementById('timelineChart');
+if (tlCanvas && timeline.length) {
+  const hours = [...new Set(timeline.map(r => r.hour))].sort();
+  const types = [...new Set(timeline.map(r => r.attack_type))];
+
+  const datasets = types.map(t => {
+    const color = TYPE_COLORS[t] || '#6b7280';
+    return {
+      label: `${TYPE_EMOJIS[t]||''} ${t}`,
+      data: hours.map(h => {
+        const found = timeline.find(r => r.hour === h && r.attack_type === t);
+        return found ? found.count : 0;
+      }),
+      borderColor: color,
+      backgroundColor: color + '22',
+      fill: true, tension: 0.4, borderWidth: 2,
+      pointRadius: 3, pointBackgroundColor: color,
+    };
+  });
+
+  new Chart(tlCanvas, {
+    type: 'line',
+    data: { labels: hours, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { grid: { color: gridColor }, ticks: { maxRotation: 45, font: { size: 10 } } },
+        y: { grid: { color: gridColor }, stacked: false, ticks: { stepSize: 1 } }
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true } },
+        tooltip: { mode: 'index', intersect: false }
+      }
+    }
+  });
+}
+
+document.querySelectorAll('.attack-width-fill[data-width]').forEach((el) => {
+  const width = Number(el.dataset.width || 0);
+  const clamped = Math.max(0, Math.min(100, width));
+  el.style.width = `${clamped}%`;
+});
+
+document.querySelectorAll('.attack-color-text[data-color]').forEach((el) => {
+  if (el.dataset.color) el.style.color = el.dataset.color;
+});
+
+document.querySelectorAll('.attack-color-bg[data-color]').forEach((el) => {
+  if (el.dataset.color) el.style.background = el.dataset.color;
+});
+
+document.querySelectorAll('.attack-color-border[data-color]').forEach((el) => {
+  if (el.dataset.color) el.style.borderLeftColor = el.dataset.color;
+});
+</script>
+{% endblock %}

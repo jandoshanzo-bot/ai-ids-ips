@@ -1,0 +1,589 @@
+{% extends 'base.html' %}
+{% block title %}{{ ts('Тікелей мониторинг — IDS', 'Мониторинг в реальном времени — IDS', 'Live Monitoring — IDS') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Индикаторлар ───────────────────────────────────── */
+.pulse-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    display: inline-block; margin-right: 6px;
+}
+.pulse-dot.live {
+    background: #10b981;
+    box-shadow: 0 0 0 0 rgba(16,185,129,.6);
+    animation: pulse-green 1.5s infinite;
+}
+.pulse-dot.off { background: #6b7280; }
+
+@keyframes pulse-green {
+    0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+    100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+}
+
+/* ── Лог лентасы ────────────────────────────────────── */
+#log-feed {
+    height: 420px;
+    overflow-y: auto;
+    font-family: 'Space Mono', monospace;
+    font-size: .78rem;
+    background: rgba(0,0,0,.25);
+    border-radius: 10px;
+    padding: 12px;
+    scroll-behavior: smooth;
+}
+.log-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 5px 8px; border-radius: 6px;
+    margin-bottom: 3px;
+    animation: slideIn .25s ease;
+    border-left: 3px solid transparent;
+}
+.log-row.attack  { background: rgba(239,68,68,.08);   border-left-color: #ef4444; }
+.log-row.normal  { background: rgba(16,185,129,.05);  border-left-color: #10b981; }
+.log-row.suspect { background: rgba(245,158,11,.07);  border-left-color: #f59e0b; }
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+.log-time  { color: #64748b; min-width: 80px; }
+.log-ip    { color: #06b6d4; min-width: 120px; font-weight: 600; }
+.log-badge { font-size: .7rem; padding: 1px 8px; border-radius: 10px; font-weight: 700; white-space: nowrap; }
+.badge-attack  { background: rgba(239,68,68,.2);  color: #ef4444; }
+.badge-normal  { background: rgba(16,185,129,.2); color: #10b981; }
+.badge-suspect { background: rgba(245,158,11,.2); color: #f59e0b; }
+
+/* ── KPI сандар ─────────────────────────────────────── */
+.live-kpi { font-size: 2rem; font-weight: 800; line-height: 1; }
+.kpi-sub  { font-size: .75rem; color: var(--text-muted); margin-top: 4px; }
+
+/* ── Мини-диаграмма (соңғы 20 оқиға) ───────────────── */
+#mini-timeline { height: 120px; }
+
+/* ── Баптау формасы ─────────────────────────────────── */
+.path-input {
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.12);
+    color: var(--text-primary);
+    border-radius: 8px;
+    padding: 8px 14px;
+    width: 100%;
+    font-family: 'Space Mono', monospace;
+    font-size: .85rem;
+}
+.path-input:focus { outline: none; border-color: var(--ai-primary); }
+
+/* ── Шабуыл типі иконалары ──────────────────────────── */
+.type-icon-dos   { color: #ef4444; font-size: 1.3rem; }
+.type-icon-probe { color: #f59e0b; font-size: 1.3rem; }
+.type-icon-r2l   { color: #8b5cf6; font-size: 1.3rem; }
+.type-icon-u2r   { color: #ec4899; font-size: 1.3rem; }
+#live-count-DoS   { color: #ef4444; }
+#live-count-Probe { color: #f59e0b; }
+#live-count-R2L   { color: #8b5cf6; }
+#live-count-U2R   { color: #ec4899; }
+</style>
+{% endblock %}
+
+{% block content %}
+{# data-watcher-running атрибуты JS-тегі Jinja2-сіз оқу үшін #}
+<div id="live-page-data"
+     data-watcher-running="{{ 'true' if watcher_running else 'false' }}"
+     data-log-path="{{ log_path }}"
+     style="display:none"></div>
+
+<!-- ── Тақырып ───────────────────────────────────────── -->
+<div class="row mb-4">
+  <div class="col-12 animate-fade-in-up">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+      <div>
+        <h2 class="mb-1">
+          <i class="fas fa-satellite-dish me-2" style="color:var(--ai-secondary)"></i>
+          {{ ts('Нақты уақыт мониторингі', 'Мониторинг в реальном времени', 'Real-time monitoring') }}
+        </h2>
+        <p class="mb-0" style="color:var(--text-muted);font-size:.85rem">
+          {{ ts('Nginx / Apache access.log — үздіксіз талдау', 'Nginx / Apache access.log — непрерывный анализ', 'Nginx / Apache access.log — continuous analysis') }}
+        </p>
+      </div>
+      <!-- Қосу/Тоқтату түймесі -->
+      <div class="d-flex align-items-center gap-3">
+        <span id="status-badge" class="d-flex align-items-center" style="font-size:.85rem">
+          <span class="pulse-dot {{ 'live' if watcher_running else 'off' }}" id="status-dot"></span>
+          <span id="status-text">{{ ts('Қосылған', 'Включен', 'Running') if watcher_running else ts('Өшірілген', 'Выключен', 'Stopped') }}</span>
+        </span>
+        <button id="btn-toggle" class="btn btn-sm {{ 'btn-outline-danger' if watcher_running else 'btn-outline-success' }}">
+          <i class="fas {{ 'fa-stop' if watcher_running else 'fa-play' }} me-1"></i>
+          <span>{{ ts('Тоқтату', 'Остановить', 'Stop') if watcher_running else ts('Бастау', 'Запустить', 'Start') }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Баптау жолы ────────────────────────────────────── -->
+<div class="row mb-4 animate-fade-in-up">
+  <div class="col-12">
+    <div class="ai-card p-3">
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <i class="fas fa-file-lines" style="color:var(--ai-primary)"></i>
+        <label style="font-size:.82rem;color:var(--text-muted);white-space:nowrap">{{ ts('Лог файлы жолы:', 'Путь к лог-файлу:', 'Log file path:') }}</label>
+        <input id="log-path-input" class="path-input"
+               placeholder="{{ ts('/var/log/nginx/access.log  немесе  /var/log/apache2/access.log', '/var/log/nginx/access.log  или  /var/log/apache2/access.log', '/var/log/nginx/access.log  or  /var/log/apache2/access.log') }}"
+               value="{{ log_path }}">
+        <button id="btn-apply" class="btn btn-sm btn-primary" style="white-space:nowrap">
+          <i class="fas fa-check me-1"></i>{{ ts('Қолдану', 'Применить', 'Apply') }}
+        </button>
+      </div>
+      <div class="mt-2" style="font-size:.75rem;color:var(--text-muted)">
+        💡 {{ ts('Тест үшін', 'Для теста', 'For testing') }}: <code style="color:var(--ai-secondary)">python simulate_log.py</code> {{ ts('скриптін іске қосыңыз — ол жалған лог жолдар жазады', 'запустите скрипт — он генерирует тестовые строки лога', 'run this script — it generates sample log lines') }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── KPI карточкалары ───────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3 animate-fade-in-up">
+    <div class="ai-card p-4 text-center">
+      <div class="live-kpi" id="kpi-total" style="color:var(--ai-primary)">0</div>
+      <div class="kpi-sub">{{ ts('Жалпы сұраныс', 'Всего запросов', 'Total requests') }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 animate-fade-in-up animate-delay-1">
+    <div class="ai-card p-4 text-center">
+      <div class="live-kpi" id="kpi-attacks" style="color:var(--ai-danger)">0</div>
+      <div class="kpi-sub">{{ ts('Шабуылдар', 'Атаки', 'Attacks') }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 animate-fade-in-up animate-delay-2">
+    <div class="ai-card p-4 text-center">
+      <div class="live-kpi" id="kpi-rate" style="color:var(--ai-warning)">0%</div>
+      <div class="kpi-sub">{{ ts('Шабуыл үлесі', 'Доля атак', 'Attack rate') }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 animate-fade-in-up animate-delay-3">
+    <div class="ai-card p-4 text-center">
+      <div class="live-kpi" id="kpi-clients" style="color:var(--ai-secondary)">{{ sse_clients }}</div>
+      <div class="kpi-sub">{{ ts('Браузер қосылымы', 'Подключения браузеров', 'Browser connections') }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Лог лентасы + Мини-диаграмма ─────────────────── -->
+<div class="row g-4 mb-4">
+
+  <!-- Лог лентасы -->
+  <div class="col-lg-8 animate-fade-in-up">
+    <div class="ai-card h-100">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h5 class="mb-0">
+            <i class="fas fa-terminal me-2" style="color:var(--ai-secondary)"></i>
+            {{ ts('Тікелей лог ағыны', 'Поток логов в реальном времени', 'Live log stream') }}
+          </h5>
+          <div class="d-flex gap-2">
+            <label class="d-flex align-items-center gap-1" style="font-size:.78rem;cursor:pointer">
+              <input type="checkbox" id="auto-scroll" checked> {{ ts('Авто-айналу', 'Автопрокрутка', 'Auto-scroll') }}
+            </label>
+            <button id="btn-clear" class="btn btn-sm btn-outline-secondary" style="font-size:.75rem">
+              <i class="fas fa-trash me-1"></i>{{ ts('Тазалау', 'Очистить', 'Clear') }}
+            </button>
+          </div>
+        </div>
+
+        <div id="log-feed">
+          <div style="color:var(--text-muted);text-align:center;margin-top:160px;font-size:.85rem">
+            <i class="fas fa-satellite-dish" style="font-size:2rem;opacity:.3;display:block;margin-bottom:12px"></i>
+            {{ ts('Лог файлын баптаңыз және «Бастау» түймесін басыңыз', 'Укажите путь к логу и нажмите «Запустить»', 'Set log path and click “Start”') }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Мини-диаграмма + IP кесте -->
+  <div class="col-lg-4 animate-fade-in-up animate-delay-1">
+    <div class="ai-card mb-3">
+      <div class="card-body p-4">
+        <h6 class="mb-3" style="font-size:.82rem;color:var(--text-muted)">
+          <i class="fas fa-chart-area me-1"></i> {{ ts('Соңғы 30 оқиға', 'Последние 30 событий', 'Last 30 events') }}
+        </h6>
+        <canvas id="mini-timeline"></canvas>
+      </div>
+    </div>
+
+    <!-- Ең белсенді IP-дар -->
+    <div class="ai-card">
+      <div class="card-body p-4">
+        <h6 class="mb-3" style="font-size:.82rem;color:var(--text-muted)">
+          <i class="fas fa-network-wired me-1"></i> {{ ts('Белсенді IP-лар', 'Активные IP', 'Active IPs') }}
+        </h6>
+        <div id="ip-table">
+          <div style="color:var(--text-muted);font-size:.8rem">{{ ts('Деректер күтілуде...', 'Ожидание данных...', 'Waiting for data...') }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Шабуыл типтері жедел санақ ────────────────────── -->
+<div class="row g-3 animate-fade-in-up animate-delay-2">
+  <div class="col-6 col-md-3">
+    <div class="ai-card p-3 d-flex align-items-center gap-3">
+      <i class="fas fa-bomb type-icon-dos"></i>
+      <div>
+        <div class="fw-bold live-type-count" id="live-count-DoS" style="font-size:1.4rem">0</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">DoS</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="ai-card p-3 d-flex align-items-center gap-3">
+      <i class="fas fa-search type-icon-probe"></i>
+      <div>
+        <div class="fw-bold live-type-count" id="live-count-Probe" style="font-size:1.4rem">0</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">Probe</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="ai-card p-3 d-flex align-items-center gap-3">
+      <i class="fas fa-unlock type-icon-r2l"></i>
+      <div>
+        <div class="fw-bold live-type-count" id="live-count-R2L" style="font-size:1.4rem">0</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">R2L</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="ai-card p-3 d-flex align-items-center gap-3">
+      <i class="fas fa-crown type-icon-u2r"></i>
+      <div>
+        <div class="fw-bold live-type-count" id="live-count-U2R" style="font-size:1.4rem">0</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">U2R</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ══════════════════════════════════════════════════════════
+//  НАҚТЫ УАҚЫТ МОНИТОРИНГ — JavaScript
+//  Қолданылған: EventSource API, Chart.js, DOM manipulation
+// ══════════════════════════════════════════════════════════
+
+// ── Серверден берілген бастапқы мәндер ────────────────────
+const _pageData = document.getElementById('live-page-data');
+const _initialRunning = _pageData ? _pageData.dataset.watcherRunning === 'true' : false;
+const I18N = {
+  statusOn: {{ ts('Қосылған', 'Включен', 'Running') | tojson }},
+  statusOff: {{ ts('Өшірілген', 'Выключен', 'Stopped') | tojson }},
+  actionStart: {{ ts('Бастау', 'Запустить', 'Start') | tojson }},
+  actionStop: {{ ts('Тоқтату', 'Остановить', 'Stop') | tojson }},
+  suspect: {{ ts('Күдікті', 'Подозрительно', 'Suspicious') | tojson }},
+  normal: {{ ts('Қалыпты', 'Норма', 'Normal') | tojson }},
+  noData: {{ ts('Деректер жоқ', 'Нет данных', 'No data') | tojson }},
+  enterPath: {{ ts('Лог файлының жолын енгізіңіз', 'Введите путь к лог-файлу', 'Enter log file path') | tojson }},
+  watchStarted: {{ ts('Бақылау басталды', 'Мониторинг запущен', 'Monitoring started') | tojson }},
+  watchStopped: {{ ts('Бақылау тоқтатылды', 'Мониторинг остановлен', 'Monitoring stopped') | tojson }},
+  pathUpdated: {{ ts('Жол жаңартылды', 'Путь обновлен', 'Path updated') | tojson }},
+  feedCleared: {{ ts('Лог тазаланды — жаңа оқиғалар күтілуде', 'Лог очищен — ожидаются новые события', 'Log cleared — waiting for new events') | tojson }},
+  errorPrefix: {{ ts('Қате: ', 'Ошибка: ', 'Error: ') | tojson }},
+};
+
+// ── Күй ────────────────────────────────────────────────────
+const state = {
+  total: 0, attacks: 0,
+  typeCounts: { DoS: 0, Probe: 0, R2L: 0, U2R: 0 },
+  ipCounts: {},          // ip → { total, attacks }
+  miniData: [],          // соңғы 30 оқиға: 1=attack, 0=normal
+  eventSource: null,
+  isWatcherRunning: _initialRunning,
+};
+
+// ── DOM сілтемелер ─────────────────────────────────────────
+const feed       = document.getElementById('log-feed');
+const kpiTotal   = document.getElementById('kpi-total');
+const kpiAttacks = document.getElementById('kpi-attacks');
+const kpiRate    = document.getElementById('kpi-rate');
+const kpiClients = document.getElementById('kpi-clients');
+const statusDot  = document.getElementById('status-dot');
+const statusText = document.getElementById('status-text');
+const btnToggle  = document.getElementById('btn-toggle');
+const btnClear   = document.getElementById('btn-clear');
+const btnApply   = document.getElementById('btn-apply');
+const autoScroll = document.getElementById('auto-scroll');
+const logInput   = document.getElementById('log-path-input');
+
+// ── Мини-диаграмма (Chart.js) ──────────────────────────────
+const isDark = !document.body.classList.contains('theme-light');
+const miniCtx = document.getElementById('mini-timeline').getContext('2d');
+const miniChart = new Chart(miniCtx, {
+  type: 'bar',
+  data: {
+    labels: Array(30).fill(''),
+    datasets: [{
+      data: Array(30).fill(0),
+      backgroundColor: ctx =>
+        ctx.raw === 1 ? 'rgba(239,68,68,.7)' : 'rgba(16,185,129,.4)',
+      borderRadius: 2,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    scales: {
+      x: { display: false },
+      y: { display: false, min: 0, max: 1 }
+    },
+    animation: { duration: 200 }
+  }
+});
+
+// ── SSE байланысы ──────────────────────────────────────────
+/**
+ * EventSource — браузердің кіріктірілген API-сы.
+ * /api/stream URL-ге GET сұраныс жасайды,
+ * сервер үздіксіз "data: {...}\n\n" жібереді.
+ * Жаңа хабарлама келген сайын onmessage шақырылады.
+ */
+function connectSSE() {
+  if (state.eventSource) {
+    state.eventSource.close();
+  }
+
+  state.eventSource = new EventSource('/api/stream');
+
+  state.eventSource.onmessage = (evt) => {
+    const msg = JSON.parse(evt.data);
+    if (msg.type === 'connected') {
+      console.log('SSE қосылды, client_id:', msg.client_id);
+      return;
+    }
+    if (msg.type === 'prediction') {
+      handlePrediction(msg);
+    }
+  };
+
+  state.eventSource.onerror = () => {
+    // Байланыс үзілсе — 3 секундтан кейін қайта қосу
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+// ── Болжам өңдеу ───────────────────────────────────────────
+function handlePrediction(msg) {
+  const isAttack  = msg.prediction === 'Attack';
+  const isSuspect = msg.is_suspicious && !isAttack;
+
+  state.total++;
+  if (isAttack) {
+    state.attacks++;
+    // Шабуыл типі санағышын жаңарту
+    const t = msg.attack_type;
+    if (t && state.typeCounts[t] !== undefined) {
+      state.typeCounts[t]++;
+      document.getElementById(`live-count-${t}`).textContent = state.typeCounts[t];
+    }
+  }
+
+  // IP статистика
+  const ip = msg.ip || 'unknown';
+  if (!state.ipCounts[ip]) state.ipCounts[ip] = { total: 0, attacks: 0 };
+  state.ipCounts[ip].total++;
+  if (isAttack) state.ipCounts[ip].attacks++;
+
+  // KPI жаңарту
+  kpiTotal.textContent   = state.total;
+  kpiAttacks.textContent = state.attacks;
+  kpiRate.textContent    = state.total
+    ? Math.round(state.attacks / state.total * 100) + '%' : '0%';
+
+  // Мини-диаграмма жаңарту (FIFO — соңғы 30)
+  state.miniData.push(isAttack ? 1 : 0);
+  if (state.miniData.length > 30) state.miniData.shift();
+  miniChart.data.datasets[0].data = [...state.miniData];
+  miniChart.update('none');
+
+  // Лог жолын жасау
+  addLogRow(msg, isAttack, isSuspect);
+
+  // IP кесте жаңарту
+  updateIPTable();
+}
+
+// ── Лог жолы ──────────────────────────────────────────────
+function addLogRow(msg, isAttack, isSuspect) {
+  const isEmpty = feed.querySelector('[data-empty]');
+  if (isEmpty) isEmpty.remove();
+
+  const cls   = isAttack ? 'attack' : isSuspect ? 'suspect' : 'normal';
+  const badge = isAttack
+    ? `<span class="log-badge badge-attack">⚠ ${msg.attack_type || 'ATTACK'}</span>`
+    : isSuspect
+    ? `<span class="log-badge badge-suspect">⚡ ${I18N.suspect}</span>`
+    : `<span class="log-badge badge-normal">✓ ${I18N.normal}</span>`;
+
+  const prob = msg.probability ? `<span style="color:var(--text-muted);font-size:.72rem">${msg.probability}%</span>` : '';
+  const path = (msg.path || '').slice(0, 40) + ((msg.path || '').length > 40 ? '…' : '');
+  const time = (msg.timestamp || '').slice(11, 19);  // HH:MM:SS
+
+  const row = document.createElement('div');
+  row.className = `log-row ${cls}`;
+  row.innerHTML = `
+    <span class="log-time">${time}</span>
+    <span class="log-ip">${msg.ip || '—'}</span>
+    ${badge}
+    <span style="color:var(--text-secondary);flex:1;overflow:hidden;white-space:nowrap">${msg.method || ''} ${path}</span>
+    ${prob}
+  `;
+
+  feed.appendChild(row);
+
+  // Максималды 200 жол
+  while (feed.children.length > 200) {
+    feed.removeChild(feed.firstChild);
+  }
+
+  // Авто-айналу
+  if (autoScroll.checked) {
+    feed.scrollTop = feed.scrollHeight;
+  }
+}
+
+// ── IP кесте ───────────────────────────────────────────────
+function updateIPTable() {
+  const sorted = Object.entries(state.ipCounts)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 6);   // ең белсенді 6 IP
+
+  const container = document.getElementById('ip-table');
+  container.innerHTML = sorted.map(([ip, d]) => {
+    const pct = d.total ? Math.round(d.attacks / d.total * 100) : 0;
+    const color = pct > 50 ? '#ef4444' : pct > 20 ? '#f59e0b' : '#10b981';
+    return `
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span style="font-family:monospace;font-size:.78rem;color:var(--ai-secondary);min-width:110px">${ip}</span>
+        <div style="flex:1;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${color};border-radius:2px;transition:width .3s"></div>
+        </div>
+        <span style="font-size:.72rem;color:${color};min-width:30px">${pct}%</span>
+        <span style="font-size:.72rem;color:var(--text-muted)">${d.total}</span>
+      </div>`;
+  }).join('') || `<div style="color:var(--text-muted);font-size:.8rem">${I18N.noData}</div>`;
+}
+
+// ── Toast хабарлама (alert() орнына) ──────────────────────
+function showToast(msg, type) {
+  // type: 'error' | 'warning' | 'success'
+  const colors = { error: '#ef4444', warning: '#f59e0b', success: '#10b981' };
+  const icons  = { error: 'fa-circle-xmark', warning: 'fa-triangle-exclamation', success: 'fa-circle-check' };
+  const color  = colors[type] || colors.warning;
+  const icon   = icons[type]  || icons.warning;
+
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position:fixed; bottom:24px; right:24px; z-index:9999;
+    background:#1e293b; border:1px solid ${color}55;
+    border-left:4px solid ${color}; border-radius:10px;
+    padding:12px 18px; display:flex; align-items:center; gap:10px;
+    font-size:.85rem; color:#e2e8f0; box-shadow:0 8px 24px rgba(0,0,0,.4);
+    animation:slideInToast .25s ease;
+  `;
+  toast.innerHTML = `<i class="fas ${icon}" style="color:${color}"></i><span>${msg}</span>`;
+
+  // CSS анимация
+  if (!document.getElementById('toast-style')) {
+    const s = document.createElement('style');
+    s.id = 'toast-style';
+    s.textContent = '@keyframes slideInToast{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}';
+    document.head.appendChild(s);
+  }
+
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// ── Бақылаушы басқару ──────────────────────────────────────
+async function setWatcher(run, logPath) {
+  const url  = run ? '/api/watcher/start' : '/api/watcher/stop';
+  const body = run ? JSON.stringify({ log_path: logPath }) : '{}';
+  const res  = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body
+  });
+  return res.json();
+}
+
+function updateWatcherUI(running) {
+  state.isWatcherRunning = running;
+  statusDot.className  = `pulse-dot ${running ? 'live' : 'off'}`;
+  statusText.textContent = running ? I18N.statusOn : I18N.statusOff;
+  btnToggle.className  = `btn btn-sm ${running ? 'btn-outline-danger' : 'btn-outline-success'}`;
+  btnToggle.innerHTML  = `<i class="fas ${running ? 'fa-stop' : 'fa-play'} me-1"></i>${running ? I18N.actionStop : I18N.actionStart}`;
+}
+
+btnToggle.addEventListener('click', async () => {
+  const running = !state.isWatcherRunning;
+  const logPath = logInput.value.trim();
+  if (running && !logPath) {
+    showToast(I18N.enterPath, 'warning');
+    logInput.focus();
+    logInput.style.borderColor = '#f59e0b';
+    setTimeout(() => { logInput.style.borderColor = ''; }, 2000);
+    return;
+  }
+  btnToggle.disabled = true;
+  const result = await setWatcher(running, logPath);
+  btnToggle.disabled = false;
+  if (result.success) {
+    updateWatcherUI(running);
+    showToast(result.message || (running ? I18N.watchStarted : I18N.watchStopped), 'success');
+  } else {
+    showToast(I18N.errorPrefix + result.error, 'error');
+  }
+});
+
+btnApply.addEventListener('click', async () => {
+  if (!state.isWatcherRunning) return;
+  await setWatcher(false, '');
+  const result = await setWatcher(true, logInput.value.trim());
+  if (result.success) showToast(I18N.pathUpdated, 'success');
+  else showToast(I18N.errorPrefix + result.error, 'error');
+});
+
+btnClear.addEventListener('click', () => {
+  feed.innerHTML = '<div data-empty style="color:var(--text-muted);text-align:center;margin-top:160px;font-size:.85rem">'
+    + '<i class="fas fa-satellite-dish" style="font-size:2rem;opacity:.3;display:block;margin-bottom:12px"></i>'
+    + `${I18N.feedCleared}</div>`;
+  state.total = state.attacks = 0;
+  state.typeCounts = { DoS:0, Probe:0, R2L:0, U2R:0 };
+  state.ipCounts = {};
+  state.miniData = [];
+  kpiTotal.textContent = kpiAttacks.textContent = '0';
+  kpiRate.textContent  = '0%';
+  Object.keys(state.typeCounts).forEach(t => {
+    document.getElementById(`live-count-${t}`).textContent = '0';
+  });
+  miniChart.data.datasets[0].data = Array(30).fill(0);
+  miniChart.update('none');
+});
+
+// ── KPI клиент санын жаңарту (30 сек сайын) ───────────────
+setInterval(async () => {
+  const res  = await fetch('/api/watcher/status');
+  const data = await res.json();
+  kpiClients.textContent = data.sse_clients;
+}, 30_000);
+
+// ── SSE байланысын бастау ──────────────────────────────────
+connectSSE();
+</script>
+{% endblock %}

@@ -1,0 +1,379 @@
+﻿{% extends 'base.html' %}
+
+{% block title %}{{ ts('Статистика - IDS', 'Статистика - IDS', 'Statistics - IDS') }}{% endblock %}
+
+{% block content %}
+{% set attack_name_map = {
+  'DoS': ts('DoS (қызметтен бас тарту)', 'DoS (отказ в обслуживании)', 'DoS (denial of service)'),
+  'Probe': ts('Probe (барлау)', 'Probe (сканирование)', 'Probe (reconnaissance)'),
+  'R2L': ts('R2L (қашықтан кіру)', 'R2L (удаленный доступ)', 'R2L (remote to local)'),
+  'U2R': ts('U2R (құқық көтеру)', 'U2R (повышение прав)', 'U2R (user to root)'),
+  'Unknown': ts('Белгісіз', 'Неизвестно', 'Unknown'),
+  'Normal': ts('Қалыпты', 'Норма', 'Normal')
+} %}
+
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4 animate-fade-in-up">
+            <i class="fas fa-chart-pie me-2" style="color: var(--ai-primary);"></i>
+            {{ ts('Статистика', 'Статистика', 'Statistics') }}
+        </h2>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3 animate-fade-in-up">
+        <div class="ai-card ai-stat-card">
+            <div class="ai-stat-value" style="color: var(--ai-primary-light);">
+                <i class="fas fa-chart-line mb-2 d-block" style="font-size: 1.5rem;"></i>
+                {{ stats.total }}
+            </div>
+            <div class="ai-stat-label">{{ ts('Жалпы талдаулар', 'Всего анализов', 'Total analyses') }}</div>
+        </div>
+    </div>
+    <div class="col-md-3 animate-fade-in-up animate-delay-1">
+        <div class="ai-card ai-stat-card ai-card-danger">
+            <div class="ai-stat-value text-danger">
+                <i class="fas fa-shield-virus mb-2 d-block" style="font-size: 1.5rem;"></i>
+                {{ stats.attacks }}
+            </div>
+            <div class="ai-stat-label">{{ ts('Шабуылдар', 'Атаки', 'Attacks') }}</div>
+        </div>
+    </div>
+    <div class="col-md-3 animate-fade-in-up animate-delay-2">
+        <div class="ai-card ai-stat-card ai-card-success">
+            <div class="ai-stat-value text-success">
+                <i class="fas fa-shield-check mb-2 d-block" style="font-size: 1.5rem;"></i>
+                {{ stats.normal }}
+            </div>
+            <div class="ai-stat-label">{{ ts('Қалыпты трафик', 'Нормальный трафик', 'Normal traffic') }}</div>
+        </div>
+    </div>
+    <div class="col-md-3 animate-fade-in-up animate-delay-3">
+        <div class="ai-card ai-stat-card ai-card-warning">
+            <div class="ai-stat-value text-warning">
+                <i class="fas fa-bell mb-2 d-block" style="font-size: 1.5rem;"></i>
+                {{ stats.alerts_sent }}
+            </div>
+            <div class="ai-stat-label">{{ ts('Жіберілген ескертулер', 'Отправленные уведомления', 'Sent alerts') }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-8 animate-fade-in-up">
+        <div class="ai-card h-100">
+            <div class="card-body p-4">
+                <h5 class="mb-1">
+                    <i class="fas fa-chart-bar me-2" style="color: var(--ai-primary);"></i>
+                    {{ ts('Модель метрикалары', 'Метрики моделей', 'Model metrics') }}
+                </h5>
+                <p class="mb-3" style="color: var(--text-muted); font-size: .85rem;">
+                    {{ ts('Дәлдік, нақтылық, қамту және F1-көрсеткіш', 'Точность, precision, полнота и F1-показатель', 'Accuracy, precision, recall and F1-score') }}
+                </p>
+                <div style="height: 300px;">
+                    <canvas id="metricsBarChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4 animate-fade-in-up animate-delay-1">
+        <div class="ai-card h-100">
+            <div class="card-body p-4">
+                <h5 class="mb-1">
+                    <i class="fas fa-chart-pie me-2" style="color: var(--ai-secondary);"></i>
+                    {{ ts('Шабуыл типтері', 'Типы атак', 'Attack types') }}
+                </h5>
+                <p class="mb-3" style="color: var(--text-muted); font-size: .85rem;">
+                    {{ ts('Анықталған шабуылдардың таралуы', 'Распределение обнаруженных атак', 'Distribution of detected attacks') }}
+                </p>
+                <div style="height: 300px;">
+                    <canvas id="attackTypeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-12 animate-fade-in-up">
+        <div class="ai-card">
+            <div class="card-body p-4">
+                <h5 class="mb-1">
+                    <i class="fas fa-wave-square me-2" style="color: var(--ai-success);"></i>
+                    {{ ts('Шабуыл динамикасы', 'Динамика атак', 'Attack timeline') }}
+                </h5>
+                <p class="mb-3" style="color: var(--text-muted); font-size: .85rem;">
+                    {{ ts('Соңғы 7 күн бойынша сағаттық тренд', 'Почасовой тренд за последние 7 дней', 'Hourly trend for the last 7 days') }}
+                </p>
+                <div style="height: 280px;">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12 animate-fade-in-up">
+        <div class="ai-card">
+            <div class="card-body p-4">
+                <h5 class="mb-4">
+                    <i class="fas fa-robot me-2" style="color: var(--ai-secondary);"></i>
+                    {{ ts('Модельдер туралы', 'О моделях', 'About models') }}
+                </h5>
+
+                <div class="row g-4">
+                    {% for model in models %}
+                    <div class="col-lg-6">
+                        <div class="ai-card p-3" style="background: var(--bg-glass);">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fas fa-cube" style="color: var(--ai-primary);"></i>
+                                    <span class="fw-semibold">{{ model.display_name }}</span>
+                                </div>
+                                <span class="ai-badge ai-badge-success">{{ ts('Белсенді', 'Активна', 'Active') }}</span>
+                            </div>
+
+                            {% if model.metrics %}
+                            <div class="row g-2">
+                                <div class="col-3">
+                                    <div class="ai-card p-2 text-center" style="background: var(--bg-tertiary);">
+                                        <small style="color: var(--text-muted); display: block; font-size: 0.7rem;">{{ ts('Дәлдік', 'Точность', 'Accuracy') }}</small>
+                                        <span style="color: var(--ai-primary-light); font-weight: 600;">{{ "%.2f"|format(model.metrics.accuracy * 100) }}%</span>
+                                    </div>
+                                </div>
+                                <div class="col-3">
+                                    <div class="ai-card p-2 text-center" style="background: var(--bg-tertiary);">
+                                        <small style="color: var(--text-muted); display: block; font-size: 0.7rem;">{{ ts('Нақтылық', 'Precision', 'Precision') }}</small>
+                                        <span style="color: var(--ai-success); font-weight: 600;">{{ "%.2f"|format(model.metrics.precision * 100) }}%</span>
+                                    </div>
+                                </div>
+                                <div class="col-3">
+                                    <div class="ai-card p-2 text-center" style="background: var(--bg-tertiary);">
+                                        <small style="color: var(--text-muted); display: block; font-size: 0.7rem;">{{ ts('Қамту', 'Полнота', 'Recall') }}</small>
+                                        <span style="color: var(--ai-secondary); font-weight: 600;">{{ "%.2f"|format(model.metrics.recall * 100) }}%</span>
+                                    </div>
+                                </div>
+                                <div class="col-3">
+                                    <div class="ai-card p-2 text-center" style="background: var(--bg-tertiary);">
+                                        <small style="color: var(--text-muted); display: block; font-size: 0.7rem;">{{ ts('F1', 'F1', 'F1') }}</small>
+                                        <span style="color: var(--ai-warning); font-weight: 600;">{{ "%.2f"|format(model.metrics.f1_score * 100) }}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <p class="mb-0" style="color: var(--text-muted);">{{ ts('Сақталған метрикалар жоқ', 'Сохраненных метрик нет', 'No saved metrics') }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 animate-fade-in-up">
+        <div class="ai-card">
+            <div class="card-body p-4">
+                <h5 class="mb-4">
+                    <i class="fas fa-list me-2" style="color: var(--ai-danger);"></i>
+                    {{ ts('Соңғы шабуылдар', 'Последние атаки', 'Recent attacks') }}
+                </h5>
+
+                {% if recent_attacks %}
+                <div class="table-responsive">
+                    <table class="ai-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>{{ ts('Уақыт', 'Время', 'Time') }}</th>
+                                <th>{{ ts('Модель', 'Модель', 'Model') }}</th>
+                                <th>{{ ts('Шабуыл түрі', 'Тип атаки', 'Attack type') }}</th>
+                                <th>{{ ts('Ықтималдық', 'Вероятность', 'Probability') }}</th>
+                                <th>{{ ts('Сенімділік', 'Уверенность', 'Confidence') }}</th>
+                                <th>{{ ts('Ескерту', 'Уведомление', 'Alert') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for attack in recent_attacks %}
+                            {% set attack_probability = ((attack.probability if attack.probability is not none else 0) * 100) %}
+                            <tr>
+                                <td style="white-space: nowrap; color: var(--text-secondary);">{{ attack.timestamp[:19] if attack.timestamp else '-' }}</td>
+                                <td><span class="ai-badge ai-badge-primary">{{ attack.model_name }}</span></td>
+                                <td>
+                                    {% set atype = attack.attack_type if attack.attack_type else 'Unknown' %}
+                                    <span class="ai-badge ai-badge-danger">{{ attack_name_map.get(atype, atype) }}</span>
+                                </td>
+                                <td>{{ "%.0f"|format(attack_probability) }}%</td>
+                                <td>{{ "%.0f"|format((attack.confidence if attack.confidence is not none else 0) * 100) }}%</td>
+                                <td>
+                                    {% if attack.alert_sent %}
+                                    <i class="fab fa-telegram" style="color: var(--ai-secondary);" title="{{ ts('Жіберілді', 'Отправлено', 'Sent') }}"></i>
+                                    {% else %}
+                                    <i class="fas fa-minus" style="color: var(--text-muted);"></i>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="mb-0" style="color: var(--text-muted);">{{ ts('Шабуылдар анықталмады', 'Атаки не обнаружены', 'No attacks detected') }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script id="statistics-chart-data" type="application/json">
+{{ {
+    'models': models,
+    'attack_by_type': attack_type_stats.by_type if attack_type_stats and attack_type_stats.by_type else [],
+    'timeline': attack_type_stats.timeline if attack_type_stats and attack_type_stats.timeline else []
+} | tojson }}
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const chartData = JSON.parse(document.getElementById('statistics-chart-data').textContent);
+const models = chartData.models || [];
+const byType = chartData.attack_by_type || [];
+const timeline = chartData.timeline || [];
+
+const I18N = {
+    metric_accuracy: {{ ts('Дәлдік', 'Точность', 'Accuracy') | tojson }},
+    metric_precision: {{ ts('Нақтылық', 'Precision', 'Precision') | tojson }},
+    metric_recall: {{ ts('Қамту', 'Полнота', 'Recall') | tojson }},
+    metric_f1: {{ ts('F1-көрсеткіш', 'F1-показатель', 'F1-score') | tojson }},
+    event_count: {{ ts('Оқиға саны', 'Количество событий', 'Event count') | tojson }},
+    normal_label: {{ ts('Қалыпты', 'Норма', 'Normal') | tojson }},
+    attack_label: {{ ts('Шабуыл', 'Атака', 'Attack') | tojson }},
+    no_saved_metrics: {{ ts('Сақталған метрикалар жоқ', 'Сохраненных метрик нет', 'No saved metrics') | tojson }}
+};
+
+const isDark = !document.body.classList.contains('theme-light');
+Chart.defaults.color = isDark ? '#94a3b8' : '#475569';
+const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+
+const metricModels = models.filter((m) => m.metrics && Object.keys(m.metrics).length);
+const modelNames = metricModels.map((m) => m.display_name || m.name || 'Model');
+const accuracies = metricModels.map((m) => Number((m.metrics?.accuracy || 0) * 100));
+const precisions = metricModels.map((m) => Number((m.metrics?.precision || 0) * 100));
+const recalls = metricModels.map((m) => Number((m.metrics?.recall || 0) * 100));
+const f1scores = metricModels.map((m) => Number((m.metrics?.f1_score || 0) * 100));
+
+const metricsCanvas = document.getElementById('metricsBarChart');
+if (metricsCanvas && modelNames.length) {
+    new Chart(metricsCanvas, {
+        type: 'bar',
+        data: {
+            labels: modelNames,
+            datasets: [
+                { label: I18N.metric_accuracy, data: accuracies, backgroundColor: 'rgba(124,58,237,0.7)', borderRadius: 4 },
+                { label: I18N.metric_precision, data: precisions, backgroundColor: 'rgba(6,182,212,0.7)', borderRadius: 4 },
+                { label: I18N.metric_recall, data: recalls, backgroundColor: 'rgba(16,185,129,0.7)', borderRadius: 4 },
+                { label: I18N.metric_f1, data: f1scores, backgroundColor: 'rgba(245,158,11,0.7)', borderRadius: 4 },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { grid: { display: false } },
+                y: {
+                    min: 0,
+                    max: 100,
+                    grid: { color: gridColor },
+                    ticks: { callback: (v) => `${v}%` },
+                },
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true } },
+            },
+        },
+    });
+} else if (metricsCanvas) {
+    metricsCanvas.parentElement.innerHTML = `<div class="d-flex h-100 align-items-center justify-content-center" style="color: var(--text-muted);">${I18N.no_saved_metrics}</div>`;
+}
+
+const attackTypeCanvas = document.getElementById('attackTypeChart');
+if (attackTypeCanvas) {
+    const labels = byType.map((row) => row.attack_type || 'Unknown');
+    const counts = byType.map((row) => Number(row.count || 0));
+
+    new Chart(attackTypeCanvas, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: counts.length ? counts : [1],
+                backgroundColor: ['#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'],
+                borderWidth: 2,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' },
+            },
+        },
+    });
+}
+
+const timelineCanvas = document.getElementById('timelineChart');
+if (timelineCanvas && timeline.length) {
+    const hours = [...new Set(timeline.map((row) => row.hour))].sort();
+    const types = [...new Set(timeline.map((row) => row.attack_type))];
+    const colors = {
+        DoS: '#ef4444',
+        Probe: '#f59e0b',
+        R2L: '#8b5cf6',
+        U2R: '#ec4899',
+        Unknown: '#6b7280',
+    };
+
+    const datasets = types.map((type) => ({
+        label: type,
+        data: hours.map((hour) => {
+            const found = timeline.find((row) => row.hour === hour && row.attack_type === type);
+            return found ? Number(found.count || 0) : 0;
+        }),
+        borderColor: colors[type] || '#6b7280',
+        backgroundColor: (colors[type] || '#6b7280') + '22',
+        fill: true,
+        tension: 0.35,
+        borderWidth: 2,
+        pointRadius: 3,
+    }));
+
+    new Chart(timelineCanvas, {
+        type: 'line',
+        data: { labels: hours, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { grid: { color: gridColor } },
+                y: {
+                    grid: { color: gridColor },
+                    ticks: { stepSize: 1 },
+                    title: { display: true, text: I18N.event_count },
+                },
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true } },
+                tooltip: { mode: 'index', intersect: false },
+            },
+        },
+    });
+} else if (timelineCanvas) {
+    timelineCanvas.parentElement.innerHTML = `<div class="d-flex h-100 align-items-center justify-content-center" style="color: var(--text-muted);">${I18N.attack_label}: 0</div>`;
+}
+</script>
+{% endblock %}

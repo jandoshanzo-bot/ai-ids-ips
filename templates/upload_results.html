@@ -1,0 +1,306 @@
+﻿{% extends 'base.html' %}
+
+{% block title %}{{ ts('Жүктеу нәтижелері - IDS', 'Результаты загрузки - IDS', 'Upload Results - IDS') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.upload-result-row-attack {
+    border-left: 3px solid var(--ai-danger);
+}
+
+.upload-result-row-normal {
+    border-left: 3px solid var(--ai-success);
+}
+
+.upload-result-progress {
+    width: 0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% set benign_count = benign if benign is defined else total - attacks %}
+{% set attack_name_map = {
+    'DoS': ts('DoS (қызметтен бас тарту)', 'DoS (отказ в обслуживании)', 'DoS (denial of service)'),
+    'Probe': ts('Probe (барлау)', 'Probe (сканирование)', 'Probe (reconnaissance)'),
+    'R2L': ts('R2L (қашықтан кіру)', 'R2L (удаленный доступ)', 'R2L (remote to local)'),
+    'U2R': ts('U2R (құқық көтеру)', 'U2R (повышение прав)', 'U2R (user to root)'),
+    'bruteforce': ts('Bruteforce', 'Bruteforce', 'Bruteforce'),
+    'ddos': ts('DDoS', 'DDoS', 'DDoS'),
+    'dos': ts('DoS', 'DoS', 'DoS'),
+    'malware': ts('Malware', 'Malware', 'Malware'),
+    'mitm': ts('MITM', 'MITM', 'MITM'),
+    'recon': ts('Recon', 'Recon', 'Recon'),
+    'web': ts('Web', 'Web', 'Web'),
+    'Unknown': ts('Белгісіз', 'Неизвестно', 'Unknown'),
+    'None': ts('Жоқ', 'Нет', 'None')
+} %}
+
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4 animate-fade-in-up">
+            <h2 class="mb-0">
+                <i class="fas fa-check-circle me-2" style="color: var(--ai-success);"></i>
+                {{ ts('Талдау нәтижелері', 'Результаты анализа', 'Analysis results') }}
+            </h2>
+            {% if model_name is defined %}
+            <span class="ai-badge ai-badge-primary">{{ model_name }}</span>
+            {% endif %}
+            <button class="ai-btn ai-btn-outline" onclick="exportToCSV()">
+                <i class="fas fa-download me-2"></i>
+                {{ ts('CSV экспорт', 'Экспорт CSV', 'Export CSV') }}
+            </button>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-md-3 animate-fade-in-up">
+                <div class="ai-card ai-stat-card">
+                    <div class="ai-stat-value" style="color: var(--ai-primary-light);">
+                        <i class="fas fa-chart-line mb-2 d-block" style="font-size: 1.5rem;"></i>
+                        {{ total }}
+                    </div>
+                    <div class="ai-stat-label">{{ ts('Жалпы талдаулар', 'Всего анализов', 'Total analyses') }}</div>
+                </div>
+            </div>
+            <div class="col-md-3 animate-fade-in-up animate-delay-1">
+                <div class="ai-card ai-stat-card ai-card-danger">
+                    <div class="ai-stat-value text-danger">
+                        <i class="fas fa-shield-virus mb-2 d-block" style="font-size: 1.5rem;"></i>
+                        {{ attacks }}
+                    </div>
+                    <div class="ai-stat-label">{{ ts('Шабуылдар', 'Атаки', 'Attacks') }}</div>
+                </div>
+            </div>
+            <div class="col-md-3 animate-fade-in-up animate-delay-2">
+                <div class="ai-card ai-stat-card ai-card-success">
+                    <div class="ai-stat-value text-success">
+                        <i class="fas fa-shield-check mb-2 d-block" style="font-size: 1.5rem;"></i>
+                        {{ benign_count }}
+                    </div>
+                    <div class="ai-stat-label">{{ ts('Benign жолдар', 'Benign строки', 'Benign rows') }}</div>
+                </div>
+            </div>
+            <div class="col-md-3 animate-fade-in-up animate-delay-3">
+                <div class="ai-card ai-stat-card">
+                    <div class="ai-stat-value" style="color: var(--ai-secondary); font-size: 1rem;">
+                        <i class="fas fa-robot mb-2 d-block" style="font-size: 1.5rem;"></i>
+                        {{ model_name | default('CICIDS2017 XGBoost') }}
+                    </div>
+                    <div class="ai-stat-label">{{ ts('Модель', 'Модель', 'Model') }}</div>
+                </div>
+            </div>
+        </div>
+
+        {% if detected_classes is defined and class_counts is defined %}
+        <div class="ai-card mb-4 animate-fade-in-up">
+            <div class="card-body p-4">
+                <h6 class="mb-3">
+                    <i class="fas fa-tags me-2" style="color: var(--ai-primary);"></i>
+                    {{ ts('Анықталған кластар', 'Обнаруженные классы', 'Detected classes') }}
+                </h6>
+                <div class="d-flex gap-2 flex-wrap">
+                    {% for class_name in detected_classes %}
+                    <span class="ai-badge ai-badge-primary">
+                        {{ attack_name_map.get(class_name, class_name) }}: {{ class_counts.get(class_name, 0) }}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if attack_distribution %}
+        <div class="row g-4 mb-4">
+            <div class="col-lg-5 animate-fade-in-up">
+                <div class="ai-card h-100">
+                    <div class="card-body p-4">
+                        <h6 class="mb-3">
+                            <i class="fas fa-list-ul me-2" style="color: var(--ai-secondary);"></i>
+                            {{ ts('Шабуыл түрлерінің үлесі', 'Доли типов атак', 'Attack type distribution') }}
+                        </h6>
+                        {% for item in attack_distribution %}
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span>{{ attack_name_map.get(item.type, item.type) }}</span>
+                                <strong>{{ item.percentage }}%</strong>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small style="color: var(--text-muted);">{{ ts('Саны', 'Количество', 'Count') }}: {{ item.count }}</small>
+                                <small style="color: var(--text-muted);">{{ item.meta.get('full_name', '') }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-7 animate-fade-in-up animate-delay-1">
+                <div class="ai-card h-100">
+                    <div class="card-body p-4">
+                        <h6 class="mb-3">
+                            <i class="fas fa-chart-pie me-2" style="color: var(--ai-primary);"></i>
+                            {{ ts('Шабуыл үлесі диаграммасы', 'Диаграмма долей атак', 'Attack distribution chart') }}
+                        </h6>
+                        <canvas id="attackTypeChart" height="140"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="ai-card animate-fade-in-up">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="ai-table mb-0" id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th style="padding-left: 1.5rem;">#</th>
+                                <th>{{ ts('Болжам', 'Прогноз', 'Prediction') }}</th>
+                                <th>{{ ts('Шабуыл түрі', 'Тип атаки', 'Attack type') }}</th>
+                                <th>{{ ts('Шабуыл ықтималдығы', 'Вероятность атаки', 'Attack probability') }}</th>
+                                <th>{{ ts('Сенімділік', 'Уверенность', 'Confidence') }}</th>
+                                <th style="padding-right: 1.5rem;">{{ ts('Мәртебе', 'Статус', 'Status') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pred in predictions %}
+                            {% set probability = pred.attack_probability if pred.attack_probability is defined and pred.attack_probability is not none else (pred.probability if pred.probability is not none else 0) %}
+                            {% set confidence = pred.confidence if pred.confidence is not none else 0 %}
+                            {% set atype = pred.attack_type | default('None') %}
+                            {% set meta  = pred.attack_type_meta | default({}) %}
+                            <tr class="{{ 'ai-card-danger upload-result-row-attack' if pred.prediction == 'Attack' else 'ai-card-success upload-result-row-normal' }}">
+                                <td style="padding-left: 1.5rem;">{{ pred.row }}</td>
+                                <td>
+                                    {% if pred.prediction == 'Attack' %}
+                                    <span class="ai-badge ai-badge-danger">
+                                        <i class="fas fa-shield-virus me-1"></i>{{ ts('Шабуыл', 'Атака', 'Attack') }}
+                                    </span>
+                                    {% else %}
+                                    <span class="ai-badge ai-badge-success">
+                                        <i class="fas fa-shield-check me-1"></i>{{ ts('Қалыпты', 'Норма', 'Normal') }}
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if pred.prediction == 'Attack' %}
+                                    <span style="font-size:.8rem">
+                                        {{ meta.get('emoji','❓') }}
+                                        <strong>{{ attack_name_map.get(atype, atype) }}</strong>
+                                        {% if meta.get('kk') %}
+                                        <br><small style="color:var(--text-muted)">{{ meta.get('kk') }}</small>
+                                        {% endif %}
+                                    </span>
+                                    {% else %}
+                                    <span style="color:var(--text-muted);font-size:.8rem">{{ ts('Жоқ', 'Нет', 'None') }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="ai-progress" style="width: 80px;">
+                                            <div class="ai-progress-bar upload-result-progress {{ 'ai-progress-danger' if probability > 0.7 else 'ai-progress-warning' if probability > 0.3 else 'ai-progress-success' }}"
+                                                 data-width="{{ probability * 100 }}"></div>
+                                        </div>
+                                        <small style="color: var(--text-secondary);">{{ "%.0f"|format(probability * 100) }}%</small>
+                                    </div>
+                                </td>
+                                <td style="color: var(--text-secondary);">{{ "%.0f"|format(confidence * 100) }}%</td>
+                                <td style="padding-right: 1.5rem;">
+                                    {% if pred.prediction == 'Attack' and probability > 0.7 %}
+                                    <i class="fab fa-telegram" style="color: var(--ai-secondary); font-size: 1.2rem;" title="{{ ts('Ескерту жіберілді', 'Уведомление отправлено', 'Alert sent') }}"></i>
+                                    {% else %}
+                                    <i class="fas fa-check" style="color: var(--ai-success);"></i>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 text-center animate-fade-in-up">
+            <a href="{{ url_for('upload_file') }}" class="ai-btn ai-btn-primary">
+                <i class="fas fa-cloud-arrow-up me-2"></i>
+                {{ ts('Жаңа файл жүктеу', 'Загрузить новый файл', 'Upload another file') }}
+            </a>
+            <a href="{{ url_for('history') }}" class="ai-btn ai-btn-outline ms-2">
+                <i class="fas fa-clock-rotate-left me-2"></i>
+                {{ ts('Тарих', 'История', 'History') }}
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function exportToCSV() {
+    const table = document.getElementById('resultsTable');
+    let csv = [];
+
+    const headers = [];
+    for (const th of table.querySelectorAll('thead th')) {
+        headers.push(th.textContent.trim());
+    }
+    csv.push(headers.join(','));
+
+    for (const row of table.querySelectorAll('tbody tr')) {
+        const rowData = [];
+        for (const cell of row.querySelectorAll('td')) {
+            rowData.push('"' + cell.textContent.trim() + '"');
+        }
+        csv.push(rowData.join(','));
+    }
+
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'prediction_results.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+const attackDistribution = {{ attack_distribution | default([]) | tojson }};
+if (attackDistribution.length > 0) {
+    const labels = attackDistribution.map((item) => item.type);
+    const percentages = attackDistribution.map((item) => Number(item.percentage || 0));
+    const counts = attackDistribution.map((item) => Number(item.count || 0));
+    const colors = ['#ef4444', '#f59e0b', '#8b5cf6', '#ec4899'];
+    const chartTarget = document.getElementById('attackTypeChart');
+
+    if (chartTarget) {
+        new Chart(chartTarget, {
+            type: 'doughnut',
+            data: {
+                labels: labels.map((label, idx) => `${label} (${counts[idx]})`),
+                datasets: [{
+                    data: percentages,
+                    backgroundColor: colors,
+                    borderColor: 'rgba(255,255,255,0.08)',
+                    borderWidth: 2,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.label}: ${ctx.parsed}%`,
+                        },
+                    },
+                },
+            },
+        });
+    }
+}
+
+document.querySelectorAll('.upload-result-progress[data-width]').forEach((bar) => {
+    const width = Number(bar.dataset.width || 0);
+    const clamped = Math.max(0, Math.min(100, width));
+    bar.style.width = `${clamped}%`;
+});
+</script>
+{% endblock %}

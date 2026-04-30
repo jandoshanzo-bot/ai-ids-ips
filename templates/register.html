@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ t('register.title') }} - IDS{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5 col-lg-4">
+        <div class="ai-card animate-fade-in-up" style="max-width: 400px; margin: 2rem auto;">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <div class="ai-feature-icon mx-auto mb-3" style="width: 64px; height: 64px; font-size: 1.75rem; background: linear-gradient(135deg, var(--ai-success), #059669);">
+                        <i class="fas fa-user-plus"></i>
+                    </div>
+                    <h4 class="mb-1">{{ t('register.new_account') }}</h4>
+                    <p class="mb-0" style="color: var(--text-muted); font-size: 0.9rem;">
+                        {{ t('register.subtitle') }}
+                    </p>
+                </div>
+
+                <form method="POST" action="{{ url_for('register') }}">
+                    <div class="ai-form-group">
+                        <label for="username" class="ai-form-label">
+                            <i class="fas fa-user me-1" style="color: var(--ai-primary);"></i>
+                            {{ t('register.username') }}
+                        </label>
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            class="ai-input"
+                            value="{{ username or '' }}"
+                            placeholder="{{ t('register.username_placeholder') }}"
+                            minlength="3"
+                            required
+                        >
+                    </div>
+
+                    <div class="ai-form-group">
+                        <label for="password" class="ai-form-label">
+                            <i class="fas fa-lock me-1" style="color: var(--ai-primary);"></i>
+                            {{ t('register.password') }}
+                        </label>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="ai-input"
+                            placeholder="{{ t('register.password_placeholder') }}"
+                            minlength="6"
+                            required
+                        >
+                    </div>
+
+                    <div class="ai-form-group">
+                        <label for="confirm_password" class="ai-form-label">
+                            <i class="fas fa-lock me-1" style="color: var(--ai-primary);"></i>
+                            {{ t('register.confirm_password') }}
+                        </label>
+                        <input
+                            type="password"
+                            id="confirm_password"
+                            name="confirm_password"
+                            class="ai-input"
+                            placeholder="{{ t('register.confirm_placeholder') }}"
+                            minlength="6"
+                            required
+                        >
+                    </div>
+
+                    <button type="submit" class="ai-btn ai-btn-success w-100 py-3">
+                        <i class="fas fa-user-check me-2"></i>
+                        {{ t('register.submit') }}
+                    </button>
+                </form>
+
+                <hr class="my-4" style="border-color: var(--border-color);">
+
+                <p class="mb-0 text-center" style="color: var(--text-muted); font-size: 0.9rem;">
+                    {{ t('register.has_account') }}
+                    <a href="{{ url_for('login') }}" style="color: var(--ai-primary-light); text-decoration: none; font-weight: 500;">
+                        {{ t('register.login_link') }}
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

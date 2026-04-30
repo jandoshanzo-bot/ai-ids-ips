@@ -1,0 +1,267 @@
+﻿{% extends 'base.html' %}
+
+{% block title %}{{ ts('Болжам жасау - IDS', 'Прогноз - IDS', 'Prediction - IDS') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.predict-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.predict-result-value {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.predict-hint {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% set default_values = sample_values if sample_values is defined else {
+    'duration': 0,
+    'protocol_type': 'tcp',
+    'service': 'http',
+    'flag': 'SF',
+    'src_bytes': 215,
+    'dst_bytes': 45076,
+    'land': 0,
+    'wrong_fragment': 0,
+    'urgent': 0,
+    'hot': 0,
+    'num_failed_logins': 0,
+    'logged_in': 1,
+    'num_compromised': 0,
+    'root_shell': 0,
+    'su_attempted': 0,
+    'num_root': 0,
+    'num_file_creations': 0,
+    'num_shells': 0,
+    'num_access_files': 0,
+    'num_outbound_cmds': 0
+} %}
+{% set current_values = input_data if input_data is defined else default_values %}
+{% set feature_labels = {
+    'duration': ts('Ұзақтығы', 'Длительность', 'Duration'),
+    'protocol_type': ts('Протокол', 'Протокол', 'Protocol'),
+    'service': ts('Сервис', 'Сервис', 'Service'),
+    'flag': ts('Жалау', 'Флаг', 'Flag'),
+    'src_bytes': ts('Жіберілген байттар', 'Исходящие байты', 'Source bytes'),
+    'dst_bytes': ts('Қабылданған байттар', 'Входящие байты', 'Destination bytes'),
+    'land': ts('LAND', 'LAND', 'LAND'),
+    'wrong_fragment': ts('Қате фрагмент', 'Ошибочный фрагмент', 'Wrong fragment'),
+    'urgent': ts('Urgent', 'Urgent', 'Urgent'),
+    'hot': ts('Hot индикаторы', 'Hot индикаторы', 'Hot indicators'),
+    'num_failed_logins': ts('Сәтсіз кірулер', 'Неудачные входы', 'Failed logins'),
+    'logged_in': ts('Кіру статусы', 'Статус входа', 'Logged in'),
+    'num_compromised': ts('Бұзылған аккаунттар', 'Скомпрометированные аккаунты', 'Compromised accounts'),
+    'root_shell': ts('Root shell', 'Root shell', 'Root shell'),
+    'su_attempted': ts('su әрекеті', 'Попытка su', 'su attempted'),
+    'num_root': ts('Root операциялар', 'Root операции', 'Root operations'),
+    'num_file_creations': ts('Файл жасау саны', 'Создано файлов', 'File creations'),
+    'num_shells': ts('Shell саны', 'Количество shell', 'Number of shells'),
+    'num_access_files': ts('Қол жеткен файлдар', 'Доступ к файлам', 'Accessed files'),
+    'num_outbound_cmds': ts('Шығыс командалар', 'Исходящие команды', 'Outbound commands')
+} %}
+
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4 animate-fade-in-up">
+            <h2 class="mb-0">
+                <i class="fas fa-brain me-2" style="color: var(--ai-primary);"></i>
+                {{ ts('Қолмен болжау', 'Ручной прогноз', 'Manual prediction') }}
+            </h2>
+            <span class="ai-badge ai-badge-primary">{{ ts('Алғашқы 20 feature', 'Первые 20 feature', 'First 20 features') }}</span>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-8 animate-fade-in-up">
+        <div class="ai-card">
+            <div class="card-body p-4">
+                <p class="predict-hint mb-4">
+                    {{ ts('Мәндерді енгізіп, трафиктің шабуыл екенін тексеріңіз.', 'Введите значения и проверьте, является ли трафик атакой.', 'Enter feature values to check whether the traffic is an attack.') }}
+                </p>
+
+                <form method="POST" action="{{ url_for('predict_page') }}">
+                    <div class="predict-grid">
+                        {% for feature in feature_names %}
+                        <div class="ai-form-group mb-0">
+                            <label class="ai-form-label" for="{{ feature }}">
+                                {{ feature_labels.get(feature, feature.replace('_', ' ')|title) }}
+                            </label>
+
+                            {% if feature == 'protocol_type' %}
+                            <select class="ai-input" id="{{ feature }}" name="{{ feature }}" required>
+                                {% set current = current_values.get(feature, default_values.get(feature, 'tcp')) %}
+                                {% for opt in ['tcp', 'udp', 'icmp'] %}
+                                <option value="{{ opt }}" {{ 'selected' if current == opt else '' }}>{{ opt|upper }}</option>
+                                {% endfor %}
+                            </select>
+                            {% elif feature == 'service' %}
+                            <select class="ai-input" id="{{ feature }}" name="{{ feature }}" required>
+                                {% set current = current_values.get(feature, default_values.get(feature, 'http')) %}
+                                {% for opt in ['http', 'ftp', 'smtp', 'domain_u', 'private', 'ecr_i'] %}
+                                <option value="{{ opt }}" {{ 'selected' if current == opt else '' }}>{{ opt }}</option>
+                                {% endfor %}
+                            </select>
+                            {% elif feature == 'flag' %}
+                            <select class="ai-input" id="{{ feature }}" name="{{ feature }}" required>
+                                {% set current = current_values.get(feature, default_values.get(feature, 'SF')) %}
+                                {% for opt in ['SF', 'S0', 'REJ', 'RSTR', 'RSTO', 'SH', 'OTH'] %}
+                                <option value="{{ opt }}" {{ 'selected' if current == opt else '' }}>{{ opt }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <input
+                                type="number"
+                                step="any"
+                                class="ai-input"
+                                id="{{ feature }}"
+                                name="{{ feature }}"
+                                value="{{ current_values.get(feature, default_values.get(feature, 0)) }}"
+                                required
+                            >
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="d-flex gap-2 flex-wrap mt-4">
+                        <button type="submit" class="ai-btn ai-btn-primary">
+                            <i class="fas fa-play me-2"></i>
+                            {{ ts('Болжау жасау', 'Сделать прогноз', 'Run prediction') }}
+                        </button>
+                        <button type="button" class="ai-btn ai-btn-outline" id="fillSampleBtn">
+                            <i class="fas fa-wand-magic-sparkles me-2"></i>
+                            {{ ts('Үлгі мәндерді толтыру', 'Заполнить пример', 'Fill sample values') }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4 animate-fade-in-up animate-delay-1">
+        {% if result %}
+        {% set is_attack = result.prediction == 'Attack' %}
+        {% set probability_pct = ((result.probability or 0) * 100) | round(1) %}
+        {% set confidence_pct = ((result.confidence or 0) * 100) | round(1) %}
+
+        <div class="ai-card {{ 'ai-card-danger' if is_attack else 'ai-card-success' }} mb-4">
+            <div class="card-body p-4">
+                <h5 class="mb-3">
+                    <i class="fas {{ 'fa-shield-virus' if is_attack else 'fa-shield-check' }} me-2" style="color: {{ 'var(--ai-danger)' if is_attack else 'var(--ai-success)' }};"></i>
+                    {{ ts('Нәтиже', 'Результат', 'Result') }}
+                </h5>
+
+                <div class="predict-result-value" style="color: {{ 'var(--ai-danger)' if is_attack else 'var(--ai-success)' }};">
+                    {{ ts('Шабуыл', 'Атака', 'Attack') if is_attack else ts('Қалыпты', 'Норма', 'Normal') }}
+                </div>
+
+                <div class="mt-3 mb-2 predict-hint">{{ ts('Модель', 'Модель', 'Model') }}: <strong>{{ result.model_name }}</strong></div>
+
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <small>{{ ts('Шабуыл ықтималдығы', 'Вероятность атаки', 'Attack probability') }}</small>
+                        <small>{{ probability_pct }}%</small>
+                    </div>
+                    <div class="ai-progress">
+                        <div class="ai-progress-bar {{ 'ai-progress-danger' if is_attack else 'ai-progress-success' }}" style="width: {{ probability_pct }}%"></div>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <small>{{ ts('Сенімділік', 'Уверенность', 'Confidence') }}</small>
+                        <small>{{ confidence_pct }}%</small>
+                    </div>
+                    <div class="ai-progress">
+                        <div class="ai-progress-bar ai-progress-primary" style="width: {{ confidence_pct }}%"></div>
+                    </div>
+                </div>
+
+                {% if is_attack and result.attack_type_info %}
+                {% set attack = result.attack_type_info %}
+                {% set attack_names = {
+                    'DoS': ts('DoS (қызметтен бас тарту)', 'DoS (отказ в обслуживании)', 'DoS (denial of service)'),
+                    'Probe': ts('Probe (барлау)', 'Probe (сканирование)', 'Probe (reconnaissance)'),
+                    'R2L': ts('R2L (қашықтан кіру)', 'R2L (удаленный доступ)', 'R2L (remote to local)'),
+                    'U2R': ts('U2R (құқық көтеру)', 'U2R (повышение прав)', 'U2R (user to root)'),
+                    'Unknown': ts('Белгісіз', 'Неизвестно', 'Unknown')
+                } %}
+                <div class="mt-3 pt-3" style="border-top: 1px solid var(--border-color);">
+                    <div class="predict-hint mb-1">{{ ts('Шабуыл түрі', 'Тип атаки', 'Attack type') }}</div>
+                    <div class="fw-semibold">{{ attack_names.get(attack.type, attack.type) }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if alert_result %}
+        <div class="ai-alert {{ 'ai-alert-success' if alert_result.get('success') else 'ai-alert-danger' }} mb-4">
+            <i class="fas {{ 'fa-paper-plane' if alert_result.get('success') else 'fa-circle-xmark' }} me-2"></i>
+            {{ ts('Telegram хабарламасы', 'Telegram уведомление', 'Telegram alert') }}:
+            {{ alert_result.get('message') if alert_result.get('message') else (ts('Жіберілді', 'Отправлено', 'Sent') if alert_result.get('success') else ts('Жіберілмеді', 'Не отправлено', 'Failed')) }}
+        </div>
+        {% endif %}
+
+        {% if result.feature_importance %}
+        <div class="ai-card">
+            <div class="card-body p-4">
+                <h6 class="mb-3">
+                    <i class="fas fa-list-ol me-2" style="color: var(--ai-secondary);"></i>
+                    {{ ts('Маңызды белгілер', 'Важные признаки', 'Top features') }}
+                </h6>
+                {% for name, score in result.feature_importance | dictsort(by='value', reverse=true) %}
+                {% if loop.index <= 8 %}
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between mb-1">
+                        <small>{{ name }}</small>
+                        <small>{{ '%.3f'|format(score) }}</small>
+                    </div>
+                    <div class="ai-progress" style="height: 6px;">
+                        <div class="ai-progress-bar ai-progress-secondary" style="width: {{ (score * 100) if score <= 1 else (score / 2) }}%"></div>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="ai-card h-100">
+            <div class="card-body p-4 d-flex flex-column justify-content-center">
+                <h5 class="mb-2">
+                    <i class="fas fa-circle-info me-2" style="color: var(--ai-secondary);"></i>
+                    {{ ts('Нұсқау', 'Инструкция', 'Instructions') }}
+                </h5>
+                <p class="predict-hint mb-0">
+                    {{ ts('Сол жақтағы өрістерді толтырып, болжау жасаңыз. Сандық өрістерге нақты мән енгізіңіз.', 'Заполните поля слева и выполните прогноз. Для числовых полей укажите значения.', 'Fill in the fields on the left and run prediction. Provide numeric values for numeric fields.') }}
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const sampleValues = {{ (sample_values if sample_values is defined else (input_data if input_data is defined else {})) | tojson }};
+
+document.getElementById('fillSampleBtn')?.addEventListener('click', () => {
+    Object.entries(sampleValues).forEach(([key, value]) => {
+        const input = document.getElementById(key);
+        if (!input) return;
+        input.value = value;
+    });
+});
+</script>
+{% endblock %}

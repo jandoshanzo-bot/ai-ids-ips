@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ t('login.title') }} - IDS{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5 col-lg-4">
+        <div class="ai-card animate-fade-in-up" style="max-width: 400px; margin: 2rem auto;">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <div class="ai-feature-icon mx-auto mb-3" style="width: 64px; height: 64px; font-size: 1.75rem;">
+                        <i class="fas fa-shield-halved"></i>
+                    </div>
+                    <h4 class="mb-1">{{ t('login.welcome') }}</h4>
+                    <p class="mb-0" style="color: var(--text-muted); font-size: 0.9rem;">
+                        {{ t('login.subtitle') }}
+                    </p>
+                </div>
+
+                <form method="POST" action="{{ url_for('login', next=next_url) }}">
+                    <input type="hidden" name="next" value="{{ next_url or '' }}">
+
+                    <div class="ai-form-group">
+                        <label for="username" class="ai-form-label">
+                            <i class="fas fa-user me-1" style="color: var(--ai-primary);"></i>
+                            {{ t('login.username') }}
+                        </label>
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            class="ai-input"
+                            value="{{ username or '' }}"
+                            placeholder="{{ t('login.username_placeholder') }}"
+                            required
+                        >
+                    </div>
+
+                    <div class="ai-form-group">
+                        <label for="password" class="ai-form-label">
+                            <i class="fas fa-lock me-1" style="color: var(--ai-primary);"></i>
+                            {{ t('login.password') }}
+                        </label>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="ai-input"
+                            placeholder="{{ t('login.password_placeholder') }}"
+                            required
+                        >
+                    </div>
+
+                    <button type="submit" class="ai-btn ai-btn-primary w-100 py-3">
+                        <i class="fas fa-right-to-bracket me-2"></i>
+                        {{ t('login.submit') }}
+                    </button>
+                </form>
+
+                <hr class="my-4" style="border-color: var(--border-color);">
+
+                <p class="mb-0 text-center" style="color: var(--text-muted); font-size: 0.9rem;">
+                    {{ t('login.no_account') }}
+                    <a href="{{ url_for('register') }}" style="color: var(--ai-primary-light); text-decoration: none; font-weight: 500;">
+                        {{ t('login.register_link') }}
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
